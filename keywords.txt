@@ -1,0 +1,24 @@
+#######################################
+# Classes, datatypes (KEYWORD1)
+#######################################
+YFLINEFOLLOW	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+YFLS    KEYWORD2
+begin	KEYWORD2
+readSensor	KEYWORD2
+disableSensor	KEYWORD2
+enableSensor	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+FREQUENCY_OSCILLATOR	LITERAL1
+LINESENSOR1	LITERAL1
+LINESENSOR2	LITERAL1
+LINESENSOR3	LITERAL1
+LINESENSOR4	LITERAL1
+LINESENSOR5	LITERAL1
+
