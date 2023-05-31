@@ -131,7 +131,7 @@ uint8_t YFROBOTFPM383::deleteID(uint16_t PageID)
 }
 
 /**
-  * @brief   清空指纹模板函数
+  * @brief   清空指纹模板函数 
   * @param   None
   * @return  应答包第9位确认码或者无效值0xFF
   */
