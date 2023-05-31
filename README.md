@@ -1,7 +1,7 @@
 # Yfrobot-FPM383-Library
 YFROBOT FPM383 Sensor Library for Arduino
 
-![](./assets/Fingerprint Identification Sensor.png)
+![](./assets/Fingerprint_Identification_Sensor.png)
 
 ## 相关链接 Links
 
