@@ -1,642 +1,304 @@
 /******************************************************************************
-  sx1508.cpp
-  sx1508 I/O Expander Library Source File
-  Creation Date: 01-18-2022
+  yfrobot_fpm383.cpp
+  YFROBOT FPM383 Sensor Library Source File
+  Creation Date: 05-31-2023
   @ YFROBOT
-
-  Here you'll find the Arduino code used to interface with the SX1508 I2C
-  8 I/O expander. There are functions to take advantage of everything the
-  SX1508 provides - input/output setting, writing pins high/low, reading
-  the input value of pins, LED driver utilities.
 
   Distributed as-is; no warranty is given.
 ******************************************************************************/
 
-#include <Wire.h>
 #include "Arduino.h"
-#include "sx1508.h"
+#include "yfrobot_fpm383.h"
 
-SX1508::SX1508()
+YFROBOTFPM383::YFROBOTFPM383(uint8_t address, uint8_t resetPin, uint8_t interruptPin, uint8_t oscillatorPin)
 {
-  _clkX = 0;
+    // Store the received parameters into member variables
+    deviceAddress = address;
+    pinInterrupt = interruptPin;
+    pinOscillator = oscillatorPin;
+    pinReset = resetPin;
 }
 
-SX1508::SX1508(uint8_t address, uint8_t resetPin, uint8_t interruptPin, uint8_t oscillatorPin)
+uint8_t YFROBOTFPM383::begin(uint8_t address, TwoWire &wirePort, uint8_t resetPin)
 {
-  // Store the received parameters into member variables
-  deviceAddress = address;
-  pinInterrupt = interruptPin;
-  pinOscillator = oscillatorPin;
-  pinReset = resetPin;
+    // Store the received parameters into member variables
+    _i2cPort = &wirePort;
+    deviceAddress = address;
+    pinReset = resetPin;
+
+    return init();
 }
 
-uint8_t SX1508::begin(uint8_t address, TwoWire &wirePort, uint8_t resetPin)
+void YFROBOTFPM383::reset(bool hardware)
 {
-  // Store the received parameters into member variables
-  _i2cPort = &wirePort;
-  deviceAddress = address;
-  pinReset = resetPin;
-
-  return init();
-}
-
-uint8_t SX1508::init(void)
-{
-  // Begin I2C should be done externally, before beginning SX1508
-  //Wire.begin();
-
-  // If the reset pin is connected
-  if (pinReset != 255)
-    reset(1);
-  else
-    reset(0);
-
-  // Communication test. We'll read from two registers with different
-  // default values to verify communication.
-  uint8_t testRegisters = readByte(REG_INTERRUPT_MASK); // This should return 0xFF, Interrupt mask register address 0x09
-
-  if (testRegisters == 0xFF)
-  {
-    // Set the clock to a default of 2MHz using internal
-    clock(INTERNAL_CLOCK_2MHZ);
-
-    return 1;
-  }
-
-  return 0;
-}
-
-void SX1508::reset(bool hardware)
-{
-  // if hardware bool is set
-  if (hardware) {
-    // Check if bit 2 of REG_MISC is set
-    // if so nReset will not issue a POR, we'll need to clear that bit first
-    uint8_t regMisc = readByte(REG_MISC);
-    if (regMisc & (1 << 2)) {
-      regMisc &= ~(1 << 2);
-      writeByte(REG_MISC, regMisc);
+    // if hardware bool is set
+    if (hardware) {
+        // Check if bit 2 of REG_MISC is set
+        // if so nReset will not issue a POR, we'll need to clear that bit first
+        uint8_t regMisc = readByte(REG_MISC);
+        if (regMisc & (1 << 2)) {
+            regMisc &= ~(1 << 2);
+            writeByte(REG_MISC, regMisc);
+        }
+        // Reset the YFROBOTFPM383, the pin is active low
+        pinMode(pinReset, OUTPUT);	  // set reset pin as output
+        digitalWrite(pinReset, LOW);  // pull reset pin low
+        delay(1);					  // Wait for the pin to settle
+        digitalWrite(pinReset, HIGH); // pull reset pin back high
+    } else {
+        // Software reset command sequence:
+        writeByte(REG_RESET, 0x12);
+        writeByte(REG_RESET, 0x34);
     }
-    // Reset the SX1508, the pin is active low
-    pinMode(pinReset, OUTPUT);	  // set reset pin as output
-    digitalWrite(pinReset, LOW);  // pull reset pin low
-    delay(1);					  // Wait for the pin to settle
-    digitalWrite(pinReset, HIGH); // pull reset pin back high
-  } else {
-    // Software reset command sequence:
-    writeByte(REG_RESET, 0x12);
-    writeByte(REG_RESET, 0x34);
-  }
 }
 
-void SX1508::pinDir(uint8_t pin, uint8_t inOut, uint8_t initialLevel)
-{
-  // The SX1508 RegDir registers: REG_DIR, REG_DIR
-  //	0: IO is configured as an output
-  //	1: IO is configured as an input
-  uint8_t modeBit;
-  if ((inOut == OUTPUT) || (inOut == ANALOG_OUTPUT)) {
-    uint8_t tempRegData = readByte(REG_DATA);
-    if (initialLevel == LOW) {
-      tempRegData &= ~(1 << pin);
-      writeByte(REG_DATA, tempRegData);
+/**
+  * @brief   串口发送函数
+  * @param   len: 发送数组长度
+  * @param   PS_Databuffer[]: 需要发送的功能协议数组，在上面已有定义
+  * @return  None
+  */
+void YFROBOTFPM383::sendData(int len, uint8_t PS_Databuffer[]) {
+    mySerial.write(PS_Databuffer, len);
+    while (mySerial.read() >= 0)
+        ;
+    // memset(PS_ReceiveBuffer, 0xFF, sizeof(PS_ReceiveBuffer));
+}
+
+/**
+  * @brief   串口接收函数
+  * @param   Timeout：接收超时时间
+  * @return  None
+  */
+void YFROBOTFPM383::receiveData(uint16_t Timeout) {
+    uint8_t i = 0;
+    while (mySerial.available() == 0 && (--Timeout)) {
+        delay(1);
     }
-    modeBit = 0;
-  } else {
-    modeBit = 1;
-  }
-
-  uint8_t tempRegDir = readByte(REG_DIR);
-  if (modeBit)
-    tempRegDir |= (1 << pin);
-  else
-    tempRegDir &= ~(1 << pin);
-  writeByte(REG_DIR, tempRegDir);
-
-  // If INPUT_PULLUP was called, set up the pullup too:
-  if (inOut == INPUT_PULLUP)
-    writePin(pin, HIGH);
-
-  if (inOut == ANALOG_OUTPUT) {
-    ledDriverInit(pin);
-  }
-}
-
-void SX1508::pinMode(uint8_t pin, uint8_t inOut, uint8_t initialLevel)
-{
-  pinDir(pin, inOut, initialLevel);
-}
-
-bool SX1508::writePin(uint8_t pin, uint8_t highLow)
-{
-  uint8_t tempRegDir = readByte(REG_DIR);
-  if ((0xFF ^ tempRegDir) & (1 << pin)) { // If the pin is an output, write high/low
-    uint8_t tempRegData = readByte(REG_DATA);
-    if (highLow)
-      tempRegData |= (1 << pin);
-    else
-      tempRegData &= ~(1 << pin);
-    return writeByte(REG_DATA, tempRegData);
-  } else { // Otherwise the pin is an input, pull-up/down
-    uint8_t tempPullUp = readByte(REG_PULL_UP);
-    uint8_t tempPullDown = readByte(REG_PULL_DOWN);
-
-    if (highLow) { // if HIGH, do pull-up, disable pull-down
-      tempPullUp |= (1 << pin);
-      tempPullDown &= ~(1 << pin);
-      return writeByte(REG_PULL_UP, tempPullUp) && writeByte(REG_PULL_DOWN, tempPullDown);
-    } else { // If LOW do pull-down, disable pull-up
-      tempPullDown |= (1 << pin);
-      tempPullUp &= ~(1 << pin);
-      return writeByte(REG_PULL_UP, tempPullUp) && writeByte(REG_PULL_DOWN, tempPullDown);
+    while (mySerial.available() > 0) {
+        delay(2);
+        PS_ReceiveBuffer[i++] = mySerial.read();
+        if (i > 15) break;
     }
-  }
 }
 
-bool SX1508::digitalWrite(uint8_t pin, uint8_t highLow)
+/**
+  * @brief   休眠函数，只有发送休眠后，模块的TOUCHOUT引脚才会变成低电平
+  * @param   None
+  * @return  None
+  */
+void YFROBOTFPM383::sleep()
 {
-  return writePin(pin, highLow);
+    FPM383C_SendData(12,PS_SleepBuffer);
 }
 
-uint8_t SX1508::readPin(uint8_t pin)
+/**
+  * @brief   模块LED灯控制函数
+  * @param   PS_ControlLEDBuffer[]：需要设置颜色的协议，一般定义在上面
+  * @return  None
+  */
+void YFROBOTFPM383::controlLED(uint8_t PS_ControlLEDBuffer[])
 {
-  uint8_t tempRegDir = readByte(REG_DIR);
-  if (tempRegDir & (1 << pin)) // If the pin is an input
-  {
-    uint8_t tempRegData = readByte(REG_DATA);
-    if (tempRegData & (1 << pin))
-      return 1;
-  } else {
-    // log_d("Pin %d not INPUT, REG_DIR: %d", pin, tempRegDir);
-  }
-  return 0;
+    FPM383C_SendData(16,PS_ControlLEDBuffer);
 }
 
-bool SX1508::readPin(const uint8_t pin, bool *value)
+/**
+  * @brief   模块任务取消操作函数，如发送了注册指纹命令，但是不想注册了，需要发送此函数
+  * @param   None
+  * @return  应答包第9位确认码或者无效值0xFF
+  */
+uint8_t YFROBOTFPM383::cancel()
 {
-  uint8_t tempRegDir;
-  if (readByte(REG_DIR, &tempRegDir)) {
-    if (tempRegDir & (1 << pin)) { // If the pin is an input
-      uint8_t tempRegData;
-      if (readByte(REG_DATA, &tempRegData)) {
-        *value = (tempRegData & (1 << pin)) != 0;
-        return true;
-      };
-    }
-    else
+    FPM383C_SendData(12,PS_CancelBuffer);
+    FPM383C_ReceiveData(2000);
+    return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
+}
+
+/**
+  * @brief   模块获取搜索指纹用的图像函数
+  * @param   None
+  * @return  应答包第9位确认码或者无效值0xFF
+  */
+uint8_t YFROBOTFPM383::getImage()
+{
+    FPM383C_SendData(12,PS_GetImageBuffer);
+    FPM383C_ReceiveData(2000);
+    return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
+}
+
+/**
+  * @brief   模块获取图像后生成特征，存储到缓冲区1
+  * @param   None
+  * @return  应答包第9位确认码或者无效值0xFF
+  */
+uint8_t YFROBOTFPM383::getChar1()
+{
+    FPM383C_SendData(13,PS_GetChar1Buffer);
+    FPM383C_ReceiveData(2000);
+    return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
+}
+
+
+/**
+  * @brief   生成特征，存储到缓冲区2
+  * @param   None
+  * @return  应答包第9位确认码或者无效值0xFF
+  */
+uint8_t YFROBOTFPM383::getChar2()
+{
+    FPM383C_SendData(13,PS_GetChar2Buffer);
+    FPM383C_ReceiveData(2000);
+    return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
+}
+
+
+/**
+  * @brief   搜索指纹模板函数
+  * @param   None
+  * @return  应答包第9位确认码或者无效值0xFF
+  */
+uint8_t YFROBOTFPM383::searchMB()
+{
+    FPM383C_SendData(17,PS_SearchMBBuffer);
+    FPM383C_ReceiveData(2000);
+    return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
+}
+
+
+/**
+  * @brief   清空指纹模板函数
+  * @param   None
+  * @return  应答包第9位确认码或者无效值0xFF
+  */
+uint8_t YFROBOTFPM383::empty()
+{
+    FPM383C_SendData(12,PS_EmptyBuffer);
+    FPM383C_ReceiveData(2000);
+    return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
+}
+
+
+/**
+  * @brief   自动注册指纹模板函数
+  * @param   PageID：注册指纹的ID号，取值0 - 59
+  * @return  应答包第9位确认码或者无效值0xFF
+  */
+uint8_t YFROBOTFPM383::autoEnroll(uint16_t PageID)
+{
+    PS_AutoEnrollBuffer[10] = (PageID>>8);
+    PS_AutoEnrollBuffer[11] = (PageID);
+    PS_AutoEnrollBuffer[15] = (0x54+PS_AutoEnrollBuffer[10]+PS_AutoEnrollBuffer[11])>>8;
+    PS_AutoEnrollBuffer[16] = (0x54+PS_AutoEnrollBuffer[10]+PS_AutoEnrollBuffer[11]);
+    FPM383C_SendData(17,PS_AutoEnrollBuffer);
+    FPM383C_ReceiveData(10000);
+    return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
+}
+
+
+/**
+  * @brief   删除指定指纹模板函数
+  * @param   PageID：需要删除的指纹ID号，取值0 - 59
+  * @return  应答包第9位确认码或者无效值0xFF
+  */
+uint8_t YFROBOTFPM383::delete(uint16_t PageID)
+{
+    PS_DeleteBuffer[10] = (PageID>>8);
+    PS_DeleteBuffer[11] = (PageID);
+    PS_DeleteBuffer[14] = (0x15+PS_DeleteBuffer[10]+PS_DeleteBuffer[11])>>8;
+    PS_DeleteBuffer[15] = (0x15+PS_DeleteBuffer[10]+PS_DeleteBuffer[11]);
+    FPM383C_SendData(16,PS_DeleteBuffer);
+    FPM383C_ReceiveData(2000);
+    return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
+}
+
+
+/**
+  * @brief   二次封装自动注册指纹函数，实现注册成功闪烁两次绿灯，失败闪烁两次红灯
+  * @param   PageID：注册指纹的ID号，取值0 - 59
+  * @return  应答包第9位确认码或者无效值0xFF
+  */
+/*，返回应答包的位9确认码。*/
+uint8_t YFROBOTFPM383::enroll(uint16_t PageID)
+{
+    if(PS_AutoEnroll(PageID) == 0x00)
     {
-      *value = false;
-      return true;
+        PS_ControlLED(PS_GreenLEDBuffer);
+        return PS_ReceiveBuffer[9];
     }
-  }
-  return false;
+    PS_ControlLED(PS_RedLEDBuffer);
+    return 0xFF;
 }
 
-uint8_t SX1508::digitalRead(uint8_t pin)
+
+/**
+  * @brief   分步式命令搜索指纹函数
+  * @param   None
+  * @return  应答包第9位确认码或者无效值0xFF
+  */
+uint8_t YFROBOTFPM383::identify()
 {
-  return readPin(pin);
-}
-
-bool SX1508::digitalRead(uint8_t pin, bool *value)
-{
-  return readPin(pin, value);
-}
-
-void SX1508::ledDriverInit(uint8_t pin, uint8_t freq /*= 1*/, bool log /*= false*/)
-{
-  uint8_t tempByte;
-
-  // Disable input buffer
-  // Writing a 1 to the pin bit will disable that pins input buffer
-  tempByte = readByte(REG_INPUT_DISABLE);
-  tempByte |= (1 << pin);
-  writeByte(REG_INPUT_DISABLE, tempByte);
-
-  // Disable pull-up
-  // Writing a 0 to the pin bit will disable that pull-up resistor
-  tempByte = readByte(REG_PULL_UP);
-  tempByte &= ~(1 << pin);
-  writeByte(REG_PULL_UP, tempByte);
-
-  // Set direction to output (REG_DIR)
-  tempByte = readByte(REG_DIR);
-  tempByte &= ~(1 << pin); // 0=output
-  writeByte(REG_DIR, tempByte);
-
-  // Enable oscillator (REG_CLOCK)
-  tempByte = readByte(REG_CLOCK);
-  tempByte |= (1 << 6);  // Internal 2MHz oscillator part 1 (set bit 6)
-  tempByte &= ~(1 << 5); // Internal 2MHz oscillator part 2 (clear bit 5)
-  writeByte(REG_CLOCK, tempByte);
-
-  // Configure LED driver clock and mode (REG_MISC)
-  tempByte = readByte(REG_MISC);
-  if (log) {
-    tempByte |= (1 << 7); // set logarithmic mode bank B
-    tempByte |= (1 << 3); // set logarithmic mode bank A
-  } else {
-    tempByte &= ~(1 << 7); // set linear mode bank B
-    tempByte &= ~(1 << 3); // set linear mode bank A
-  }
-
-  // Use configClock to setup the clock divder
-  if (_clkX == 0) { // Make clckX non-zero
-    _clkX = 2000000.0 / (1 << (1 - 1)); // Update private clock variable
-
-    uint8_t freq = (1 & 0x07) << 4; // freq should only be 3 bits from 6:4
-    tempByte |= freq;
-  }
-  writeByte(REG_MISC, tempByte);
-
-  // Enable LED driver operation (REG_LED_DRIVER_ENABLE)
-  tempByte = readByte(REG_LED_DRIVER_ENABLE);
-  tempByte |= (1 << pin);
-  writeByte(REG_LED_DRIVER_ENABLE, tempByte);
-
-  // Set REG_DATA bit low ~ LED driver started
-  tempByte = readByte(REG_DATA);
-  tempByte &= ~(1 << pin);
-  writeByte(REG_DATA, tempByte);
-}
-
-void SX1508::pwm(uint8_t pin, uint8_t iOn)
-{
-  // Write the on intensity of pin
-  // Linear mode: Ion = iOn
-  // Log mode: Ion = f(iOn)
-  writeByte(REG_I_ON[pin], iOn);
-}
-
-void SX1508::analogWrite(uint8_t pin, uint8_t iOn)
-{
-  pwm(pin, iOn);
-}
-
-void SX1508::blink(uint8_t pin, unsigned long tOn, unsigned long tOff, uint8_t onIntensity, uint8_t offIntensity)
-{
-  uint8_t onReg = calculateLEDTRegister(tOn);
-  uint8_t offReg = calculateLEDTRegister(tOff);
-
-  setupBlink(pin, onReg, offReg, onIntensity, offIntensity, 0, 0);
-}
-
-void SX1508::breathe(uint8_t pin, unsigned long tOn, unsigned long tOff, unsigned long rise, unsigned long fall, uint8_t onInt, uint8_t offInt, bool log)
-{
-  offInt = constrain(offInt, 0, 7);
-
-  uint8_t onReg = calculateLEDTRegister(tOn);
-  uint8_t offReg = calculateLEDTRegister(tOff);
-
-  uint8_t riseTime = calculateSlopeRegister(rise, onInt, offInt);
-  uint8_t fallTime = calculateSlopeRegister(fall, onInt, offInt);
-
-  setupBlink(pin, onReg, offReg, onInt, offInt, riseTime, fallTime, log);
-}
-
-void SX1508::setupBlink(uint8_t pin, uint8_t tOn, uint8_t tOff, uint8_t onIntensity, uint8_t offIntensity, uint8_t tRise, uint8_t tFall, bool log)
-{
-  ledDriverInit(pin, log);
-
-  // Keep parameters within their limits:
-  tOn &= 0x1F;  // tOn should be a 5-bit value
-  tOff &= 0x1F; // tOff should be a 5-bit value
-  offIntensity &= 0x07;
-  // Write the time on
-  // 1-15:  TON = 64 * tOn * (255/ClkX)
-  // 16-31: TON = 512 * tOn * (255/ClkX)
-  writeByte(REG_T_ON[pin], tOn);
-
-  // Write the time/intensity off register
-  // 1-15:  TOFF = 64 * tOff * (255/ClkX)
-  // 16-31: TOFF = 512 * tOff * (255/ClkX)
-  // linear Mode - IOff = 4 * offIntensity
-  // log mode - Ioff = f(4 * offIntensity)
-  writeByte(REG_OFF[pin], (tOff << 3) | offIntensity);
-
-  // Write the on intensity:
-  writeByte(REG_I_ON[pin], onIntensity);
-
-  // Prepare tRise and tFall
-  tRise &= 0x1F; // tRise is a 5-bit value
-  tFall &= 0x1F; // tFall is a 5-bit value
-
-  // Write regTRise
-  // 0: Off
-  // 1-15:  TRise =      (regIOn - (4 * offIntensity)) * tRise * (255/ClkX)
-  // 16-31: TRise = 16 * (regIOn - (4 * offIntensity)) * tRise * (255/ClkX)
-  if (REG_T_RISE[pin] != 0xFF)
-    writeByte(REG_T_RISE[pin], tRise);
-  // Write regTFall
-  // 0: off
-  // 1-15:  TFall =      (regIOn - (4 * offIntensity)) * tFall * (255/ClkX)
-  // 16-31: TFall = 16 * (regIOn - (4 * offIntensity)) * tFall * (255/ClkX)
-  if (REG_T_FALL[pin] != 0xFF)
-    writeByte(REG_T_FALL[pin], tFall);
-}
-
-void SX1508::sync(void)
-{
-  // First check if nReset functionality is set
-  uint8_t regMisc = readByte(REG_MISC);
-  if (!(regMisc & 0x04))
-  {
-    regMisc |= (1 << 2);
-    writeByte(REG_MISC, regMisc);
-  }
-
-  // Toggle nReset pin to sync LED timers
-  pinMode(pinReset, OUTPUT);	  // set reset pin as output
-  digitalWrite(pinReset, LOW);  // pull reset pin low
-  delay(1);					  // Wait for the pin to settle
-  digitalWrite(pinReset, HIGH); // pull reset pin back high
-
-  // Return nReset to POR functionality
-  writeByte(REG_MISC, (regMisc & ~(1 << 2)));
-}
-
-void SX1508::debounceConfig(uint8_t configValue)
-{
-  // First make sure clock is configured
-  uint8_t tempByte = readByte(REG_MISC);
-  if ((tempByte & 0x70) == 0)
-  {
-    tempByte |= (1 << 4); // Just default to no divider if not set
-    writeByte(REG_MISC, tempByte);
-  }
-  tempByte = readByte(REG_CLOCK);
-  if ((tempByte & 0x60) == 0)
-  {
-    tempByte |= (1 << 6); // default to internal osc.
-    writeByte(REG_CLOCK, tempByte);
-  }
-
-  configValue &= 0b111; // 3-bit value
-  writeByte(REG_DEBOUNCE_CONFIG, configValue);
-}
-
-void SX1508::debounceTime(uint8_t time)
-{
-  if (_clkX == 0)					   // If clock hasn't been set up.
-    clock(INTERNAL_CLOCK_2MHZ, 1); // Set clock to 2MHz.
-
-  // Debounce time-to-byte map: (assuming fOsc = 2MHz)
-  // 0: 0.5ms		1: 1ms
-  // 2: 2ms		3: 4ms
-  // 4: 8ms		5: 16ms
-  // 6: 32ms		7: 64ms
-  // 2^(n-1)
-  uint8_t configValue = 0;
-  // We'll check for the highest set bit position,
-  // and use that for debounceConfig
-  for (int8_t i = 7; i >= 0; i--)
-  {
-    if (time & (1 << i))
+    if(PS_GetImage() == 0x00)
     {
-      configValue = i + 1;
-      break;
+        if(PS_GetChar1() == 0x00)
+        {
+            if(PS_SearchMB() == 0x00)
+            {
+                if(PS_ReceiveBuffer[8] == 0x07 && PS_ReceiveBuffer[9] == 0x00)
+                {
+                    PS_ControlLED(PS_GreenLEDBuffer);
+                    return PS_ReceiveBuffer[9];
+                }
+            }
+        }
     }
-  }
-  configValue = constrain(configValue, 0, 7);
-
-  debounceConfig(configValue);
+    ErrorNum++;
+    PS_ControlLED(PS_RedLEDBuffer);
+    return 0xFF;
 }
 
-void SX1508::debounceEnable(uint8_t pin)
+
+/**
+  * @brief   搜索指纹后的应答包校验，在此执行相应的功能，如开关继电器、开关灯等等功能
+  * @param   ACK：各个功能函数返回的应答包
+  * @return  None
+  */
+void YFROBOTFPM383::SEARCH_ACK_CHECK(uint8_t ACK)
 {
-  uint8_t debounceEnable = readByte(REG_DEBOUNCE_ENABLE);
-  debounceEnable |= (1 << pin);
-  writeByte(REG_DEBOUNCE_ENABLE, debounceEnable);
+	if(PS_ReceiveBuffer[6] == 0x07)
+	{
+		switch (ACK)
+		{
+			case 0x00:                          //指令正确
+                SearchID = (int)((PS_ReceiveBuffer[10] << 8) + PS_ReceiveBuffer[11]);
+                sprintf(str,"Now Search ID: %d",(int)SearchID);
+                Blinker.notify(str);
+                if(SearchID == 0) WiFi_Connected_State = 0;
+                digitalWrite(12,!digitalRead(12));
+                if(ErrorNum < 5) ErrorNum = 0;
+				break;
+		}
+	}
+  for(int i=0;i<20;i++) PS_ReceiveBuffer[i] = 0xFF;
 }
 
-void SX1508::debouncePin(uint8_t pin)
+
+/**
+  * @brief   注册指纹后返回的应答包校验
+  * @param   ACK：注册指纹函数返回的应答包
+  * @return  None
+  */
+void YFROBOTFPM383::ENROLL_ACK_CHECK(uint8_t ACK)
 {
-  debounceEnable(pin);
-}
-
-void SX1508::debounceKeypad(uint8_t time, uint8_t numRows, uint8_t numCols)
-{
-  // Set up debounce time:
-  debounceTime(time);
-
-  // Set up debounce pins:
-  for (uint8_t i = 0; i < numRows; i++)
-    debouncePin(i);
-  for (uint8_t i = 0; i < (8 + numCols); i++)
-    debouncePin(i);
-}
-
-void SX1508::enableInterrupt(uint8_t pin, uint8_t riseFall)
-{
-  // Set REG_INTERRUPT_MASK
-  uint8_t tempByte = readByte(REG_INTERRUPT_MASK);
-  tempByte &= ~(1 << pin); // 0 = event on IO will trigger interrupt
-  writeByte(REG_INTERRUPT_MASK, tempByte);
-
-  uint8_t sensitivity = 0;
-  switch (riseFall)
-  {
-    case CHANGE:
-      sensitivity = 0b11;
-      break;
-    case FALLING:
-      sensitivity = 0b10;
-      break;
-    case RISING:
-      sensitivity = 0b01;
-      break;
-  }
-
-  // Set REG_SENSE_XXX
-  // Sensitivity is set as follows:
-  // 00: None
-  // 01: Rising
-  // 10: Falling
-  // 11: Both
-  uint8_t pinMask = (pin & 0x07) * 2;
-  uint8_t senseRegister;
-
-  // Need to select between two words. One for bank A, one for B.
-  if (pin >= 8)
-    senseRegister = REG_SENSE_HIGH;
-  else
-    senseRegister = REG_SENSE_HIGH;
-
-  tempByte = readByte(senseRegister);
-  tempByte &= ~(0b11 << pinMask);		  // Mask out the bits we want to write
-  tempByte |= (sensitivity << pinMask); // Add our new bits
-  writeByte(senseRegister, tempByte);
-}
-
-uint8_t SX1508::interruptSource(bool clear /* =true*/)
-{
-  uint8_t intSource = readByte(REG_INTERRUPT_SOURCE);
-  if (clear)
-    writeByte(REG_INTERRUPT_SOURCE, 0xFF); // Clear interrupts
-  return intSource;
-}
-
-bool SX1508::checkInterrupt(uint8_t pin)
-{
-  if (interruptSource(false) & (1 << pin))
-    return true;
-
-  return false;
-}
-
-void SX1508::clock(uint8_t oscSource, uint8_t oscDivider, uint8_t oscPinFunction, uint8_t oscFreqOut)
-{
-  configClock(oscSource, oscPinFunction, oscFreqOut, oscDivider);
-}
-
-void SX1508::configClock(uint8_t oscSource /*= 2*/, uint8_t oscPinFunction /*= 0*/, uint8_t oscFreqOut /*= 0*/, uint8_t oscDivider /*= 1*/)
-{
-  // RegClock constructed as follows:
-  //	6:5 - Oscillator frequency souce
-  //		00: off, 01: external input, 10: internal 2MHz, 1: reserved
-  //	4 - OSCIO pin function
-  //		0: input, 1 ouptut
-  //	3:0 - Frequency of oscout pin
-  //		0: LOW, 0xF: high, else fOSCOUT = FoSC/(2^(RegClock[3:0]-1))
-  oscSource = (oscSource & 0b11) << 5;		// 2-bit value, bits 6:5
-  oscPinFunction = (oscPinFunction & 1) << 4; // 1-bit value bit 4
-  oscFreqOut = (oscFreqOut & 0b1111);			// 4-bit value, bits 3:0
-  uint8_t regClock = oscSource | oscPinFunction | oscFreqOut;
-  writeByte(REG_CLOCK, regClock);
-
-  // Config RegMisc[6:4] with oscDivider
-  // 0: off, else ClkX = fOSC / (2^(RegMisc[6:4] -1))
-  oscDivider = constrain(oscDivider, 1, 7);
-  _clkX = 2000000.0 / (1 << (oscDivider - 1)); // Update private clock variable
-  oscDivider = (oscDivider & 0b111) << 4;		 // 3-bit value, bits 6:4
-
-  uint8_t regMisc = readByte(REG_MISC);
-  regMisc &= ~(0b111 << 4);
-  regMisc |= oscDivider;
-  writeByte(REG_MISC, regMisc);
-}
-
-uint8_t SX1508::calculateLEDTRegister(uint8_t ms)
-{
-  uint8_t regOn1, regOn2;
-  float timeOn1, timeOn2;
-
-  if (_clkX == 0)
-    return 0;
-
-  regOn1 = (float)(ms / 1000.0) / (64.0 * 255.0 / (float)_clkX);
-  regOn2 = regOn1 / 8;
-  regOn1 = constrain(regOn1, 1, 15);
-  regOn2 = constrain(regOn2, 16, 31);
-
-  timeOn1 = 64.0 * regOn1 * 255.0 / _clkX * 1000.0;
-  timeOn2 = 512.0 * regOn2 * 255.0 / _clkX * 1000.0;
-
-  if (abs(timeOn1 - ms) < abs(timeOn2 - ms))
-    return regOn1;
-  else
-    return regOn2;
-}
-
-uint8_t SX1508::calculateSlopeRegister(uint8_t ms, uint8_t onIntensity, uint8_t offIntensity)
-{
-  uint16_t regSlope1, regSlope2;
-  float regTime1, regTime2;
-
-  if (_clkX == 0)
-    return 0;
-
-  float tFactor = ((float)onIntensity - (4.0 * (float)offIntensity)) * 255.0 / (float)_clkX;
-  float timeS = float(ms) / 1000.0;
-
-  regSlope1 = timeS / tFactor;
-  regSlope2 = regSlope1 / 16;
-
-  regSlope1 = constrain(regSlope1, 1, 15);
-  regSlope2 = constrain(regSlope2, 16, 31);
-
-  regTime1 = regSlope1 * tFactor * 1000.0;
-  regTime2 = 16 * regTime1;
-
-  if (abs(regTime1 - ms) < abs(regTime2 - ms))
-    return regSlope1;
-  else
-    return regSlope2;
-}
-
-// readByte(uint8_t registerAddress)
-//	This function reads a single byte located at the registerAddress register.
-//	- deviceAddress should already be set by the constructor.
-//	- Return value is the byte read from registerAddress
-//		- Currently returns 0 if communication has timed out
-uint8_t SX1508::readByte(uint8_t registerAddress)
-{
-  uint8_t readValue;
-  // Commented the line as variable seems unused;
-  //uint16_t timeout = RECEIVE_TIMEOUT_VALUE;
-
-  _i2cPort->beginTransmission(deviceAddress);
-  _i2cPort->write(registerAddress);
-  _i2cPort->endTransmission();
-  _i2cPort->requestFrom(deviceAddress, (uint8_t)1);
-
-  readValue = _i2cPort->read();
-
-  return readValue;
-}
-
-bool SX1508::readByte(uint8_t registerAddress, uint8_t *value)
-{
-  return readBytes(registerAddress, value, 1);
-}
-
-// readBytes(uint8_t firstRegisterAddress, uint8_t * destination, uint8_t length)
-//	This function reads a series of bytes incrementing from a given address
-//	- firstRegisterAddress is the first address to be read
-//	- destination is an array of bytes where the read values will be stored into
-//	- length is the number of bytes to be read
-//	- Return boolean true if succesfull
-bool SX1508::readBytes(uint8_t firstRegisterAddress, uint8_t *destination, uint8_t length)
-{
-  _i2cPort->beginTransmission(deviceAddress);
-  _i2cPort->write(firstRegisterAddress);
-  uint8_t endResult = _i2cPort->endTransmission();
-  bool result = (endResult == I2C_ERROR_OK) && (_i2cPort->requestFrom(deviceAddress, length) == length);
-
-  if (result)
-  {
-    for (uint8_t i = 0; i < length; i++)
-    {
-      destination[i] = _i2cPort->read();
-    }
-  }
-  return result;
-}
-
-// writeByte(uint8_t registerAddress, uint8_t writeValue)
-//	This function writes a single byte to a single register on the SX509.
-//	- writeValue is written to registerAddress
-//	- deviceAddres should already be set from the constructor
-//	- Return value: true if succeeded, false if failed
-bool SX1508::writeByte(uint8_t registerAddress, uint8_t writeValue)
-{
-  _i2cPort->beginTransmission(deviceAddress);
-  bool result = _i2cPort->write(registerAddress) && _i2cPort->write(writeValue);
-  uint8_t endResult = _i2cPort->endTransmission();
-  return result && (endResult == I2C_ERROR_OK);
-}
-
-// writeBytes(uint8_t firstRegisterAddress, uint8_t * writeArray, uint8_t length)
-//	This function writes an array of bytes, beggining at a specific adddress
-//	- firstRegisterAddress is the initial register to be written.
-//		- All writes following will be at incremental register addresses.
-//	- writeArray should be an array of byte values to be written.
-//	- length should be the number of bytes to be written.
-//	- Return value: true if succeeded, false if failed
-bool SX1508::writeBytes(uint8_t firstRegisterAddress, uint8_t *writeArray, uint8_t length)
-{
-  _i2cPort->beginTransmission(deviceAddress);
-  bool result = _i2cPort->write(firstRegisterAddress);
-  result = _i2cPort->write(writeArray, length);
-  uint8_t endResult = _i2cPort->endTransmission();
-  return result && (endResult == I2C_ERROR_OK);
+	if(PS_ReceiveBuffer[6] == 0x07)
+	{
+		switch (ACK)
+		{
+			case 0x00:                          //指令正确
+                EnrollID = (int)((PS_AutoEnrollBuffer[10] << 8) + PS_AutoEnrollBuffer[11]);
+                sprintf(str,"Now Enroll ID: %d",(int)EnrollID);
+                Blinker.notify(str);
+				break;
+		}
+	}
+  for(int i=0;i<20;i++) PS_ReceiveBuffer[i] = 0xFF;
 }

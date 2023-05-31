@@ -1,174 +1,82 @@
 /******************************************************************************
-  sx1508.cpp
-  sx1508 I/O Expander Library Source File
-  Creation Date: 01-18-2022
+  yfrobot_fpm383.h
+  YFROBOT FPM383 Sensor Library Source File
+  Creation Date: 05-31-2023
   @ YFROBOT
-
-  Here you'll find the Arduino code used to interface with the SX1508 I2C
-  8 I/O expander. There are functions to take advantage of everything the
-  SX1508 provides - input/output setting, writing pins high/low, reading
-  the input value of pins, LED driver utilities.
 
   Distributed as-is; no warranty is given.
 ******************************************************************************/
 
 #include "Arduino.h"
+#include "SoftwareSerial.h"
 
-#ifndef SX1508_H
-#define SX1508_H
-
-#ifndef I2C_ERROR_OK
-#define I2C_ERROR_OK 0
-#endif
+#ifndef YFROBOTFPM383_H
+#define YFROBOTFPM383_H
 
 #define RECEIVE_TIMEOUT_VALUE 1000 // Timeout for I2C receive
 
-// These are used for setting LED driver to linear or log mode:
-#define LINEAR 0
-#define LOGARITHMIC 1
-
-// These are used for clock config:
-#define INTERNAL_CLOCK_2MHZ 2
-#define EXTERNAL_CLOCK 1
-
-#define SOFTWARE_RESET 0
-#define HARDWARE_RESET 1
-
-#define ANALOG_OUTPUT 0x3 // To set a pin mode for PWM output
-
-#define   REG_INPUT_DISABLE   0x00  //  RegInputDisableA Input buffer disable register _ I/O[7_0] (Bank A) 0000 0000
-#define   REG_LONG_SLEW     0x01  //  RegLongSlewA Output buffer long slew register _ I/O[7_0] (Bank A) 0000 0000
-#define   REG_LOW_DRIVE     0x02  //  RegLowDriveA Output buffer low drive register _ I/O[7_0] (Bank A) 0000 0000
-#define   REG_PULL_UP       0x03  //  RegPullUpA Pull_up register _ I/O[7_0] (Bank A) 0000 0000
-#define   REG_PULL_DOWN     0x04  //  RegPullDownA Pull_down register _ I/O[7_0] (Bank A) 0000 0000
-#define   REG_OPEN_DRAIN      0x05  //  RegOpenDrainA Open drain register _ I/O[7_0] (Bank A) 0000 0000
-#define   REG_POLARITY      0x06  //  RegPolarityA Polarity register _ I/O[7_0] (Bank A) 0000 0000
-#define   REG_DIR         0x07  //  RegDirA Direction register _ I/O[7_0] (Bank A) 1111 1111
-#define   REG_DATA        0x08  //  RegDataA Data register _ I/O[7_0] (Bank A) 1111 1111*
-#define   REG_INTERRUPT_MASK    0x09  //  RegInterruptMaskA Interrupt mask register _ I/O[7_0] (Bank A) 1111 1111
-#define   REG_SENSE_HIGH      0x0A  //  RegSenseHighA Sense register for I/O[7:4] 0000 0000
-#define   REG_SENSE_LOW     0x0B  //  RegSenseLowA Sense register for I/O[3:0] 0000 0000
-#define   REG_INTERRUPT_SOURCE  0x0C  //  RegInterruptSourceA Interrupt source register _ I/O[7_0] (Bank A) 0000 0000
-#define   REG_EVENT_STATUS    0x0D  //  RegEventStatusA Event status register _ I/O[7_0] (Bank A) 0000 0000
-#define   REG_LEVEL_SHIFTER   0x0E  //  RegLevelShifter1 Level shifter register 0000 0000
-#define   REG_CLOCK       0x0F  //  RegClock Clock management register 0000 0000
-#define   REG_MISC        0x10  //  RegMisc Miscellaneous device settings register 0000 0000
-#define   REG_LED_DRIVER_ENABLE 0x11  //  RegLEDDriverEnableA LED driver enable register _ I/O[7_0] (Bank A) 0000 0000
-// Debounce and Keypad Engine
-#define   REG_DEBOUNCE_CONFIG   0x12  //  RegDebounceConfig Debounce configuration register 0000 0000
-#define   REG_DEBOUNCE_ENABLE   0x13  //  RegDebounceEnableA Debounce enable register _ I/O[7_0] (Bank A) 0000 0000
-#define   REG_KEY_CONFIG      0x14  //  RegKeyConfig1 Key scan configuration register 0000 0000
-#define   REG_KEY_DATA      0x15  //  RegKeyData1 Key value 1111 1111
-// LED Driver (PWM, blinking, breathing)
-#define   REG_I_ON_0        0x16  //  RegIOn0 ON intensity register for I/O[0] 1111 1111
-#define   REG_I_ON_1        0x17  //  RegIOn1 ON intensity register for I/O[1] 1111 1111
-#define   REG_T_ON_2        0x18  //  RegTOn2 ON time register for I/O[2] 0000 0000
-#define   REG_I_ON_2        0x19  //  RegIOn2 ON intensity register for I/O[2] 1111 1111
-#define   REG_OFF_2       0x1A  //  RegOff2 OFF time/intensity register for I/O[2] 0000 0000
-#define   REG_T_ON_3        0x1B  //  RegTOn3 ON time register for I/O[3] 0000 0000
-#define   REG_I_ON_3        0x1C  //  RegIOn3 ON intensity register for I/O[3] 1111 1111
-#define   REG_OFF_3       0x1D  //  RegOff3 OFF time/intensity register for I/O[3] 0000 0000
-#define   REG_T_RISE_3      0x1E  //  RegTRise3 Fade in register for I/O[3] 0000 0000
-#define   REG_T_FALL_3      0x1F  //  RegTFall3 Fade out register for I/O[3] 0000 0000
-#define   REG_I_ON_4        0x20  //  RegIOn4 ON intensity register for I/O[4] 1111 1111
-#define   REG_I_ON_5        0x21  //  RegIOn5 ON intensity register for I/O[5] 1111 1111
-#define   REG_T_ON_6        0x22  //  RegTOn6 ON time register for I/O[6] 0000 0000
-#define   REG_I_ON_6        0x23  //  RegIOn6 ON intensity register for I/O[6] 1111 1111
-#define   REG_OFF_6       0x24  //  RegOff6 OFF time/intensity register for I/O[6] 0000 0000
-#define   REG_T_ON_7        0x25  //  RegTOn7 ON time register for I/O[7] 0000 0000
-#define   REG_I_ON_7        0x26  //  RegIOn7 ON intensity register for I/O[7] 1111 1111
-#define   REG_OFF_7       0x27  //  RegOff7 OFF time/intensity register for I/O[7] 0000 0000
-#define   REG_T_RISE_7      0x28  //  RegTRise7 Fade in register for I/O[7] 0000 0000
-#define   REG_T_FALL_7      0x29  //  RegTFall7 Fade out register for I/O[7] 0000 0000
-//  Miscellaneous
-#define   REG_HIGH_INPUT      0x2A  //  RegHighInputA High input enable register _ I/O[7_0] (Bank A) 0000 0000
-//  Software Reset
-#define   REG_RESET       0x7D  //  RegReset Software reset register 0000 0000
-#define   REG_TEST_1        0x7E  //  RegTest1 Test register 0000 0000
-#define   REG_TEST_2        0x7F  //  RegTest2 Test register 0000 0000
-
-class SX1508
+class YFROBOTFPM383
 {
   private:
+    uint8_t PS_ReceiveBuffer[20];  //串口接收数据的临时缓冲数组
 
-    byte REG_I_ON[8] = {REG_I_ON_0, REG_I_ON_1, REG_I_ON_2, REG_I_ON_3,
-                        REG_I_ON_4, REG_I_ON_5, REG_I_ON_6, REG_I_ON_7
-                       };
+    /********************************************** 指纹模块 指令集 ************************************************/
+    //指令/命令包格式：包头0xEF01  设备地址4bytes  包标识1byte  包长度2bytes  指令码1byte  参数1......参数N  校验和2bytes
+    //验证用获取图像 0x01，验证指纹时，探测手指，探测到后录入指纹图像存于图像缓冲区。返回确认码表示：录入成功、无手指等。
+    uint8_t PS_GetImageBuffer[12] = { 0xEF, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x00, 0x03, 0x01, 0x00, 0x05 };
+    // 生成特征 0x02，将图像缓冲区中的原始图像生成指纹特征文件存于模板缓冲区。
+    uint8_t PS_GetChar1Buffer[13] = { 0xEF, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x00, 0x04, 0x02, 0x01, 0x00, 0x08 };
+    uint8_t PS_GetChar2Buffer[13] = { 0xEF, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x00, 0x04, 0x02, 0x02, 0x00, 0x09 };
+    // 搜索指纹 0x04，以模板缓冲区中的特征文件搜索整个或部分指纹库。若搜索到，则返回页码。加密等级设置为 0 或 1 情况下支持此功能。
+    uint8_t PS_SearchMBBuffer[17] = { 0xEF, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x00, 0x08, 0x04, 0x01, 0x00, 0x00, 0xFF, 0xFF, 0x02, 0x0C };
+    // 删除指纹 0x0C，删除 flash 数据库中指定 ID（此处0） 号开始的N 个指纹模板。//PageID: bit 10:11，SUM: bit 14:15
+    uint8_t PS_DeleteBuffer[16] = { 0xEF, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x00, 0x07, 0x0C, '\0', '\0', 0x00, 0x01, '\0', '\0' };
+    // 清空指纹库 0x0D，删除 flash 数据库中所有指纹模板。
+    uint8_t PS_EmptyBuffer[12] = { 0xEF, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x00, 0x03, 0x0D, 0x00, 0x11 };
+    // 取消指令 0x30，取消自动注册模板和自动验证指纹。加密等级设置为 0 或 1 情况下支持此功能。
+    uint8_t PS_CancelBuffer[12] = { 0xEF, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x00, 0x03, 0x30, 0x00, 0x34 };
+    // 自动注册 0x31，一站式注册指纹，包含采集指纹、生成特征、组合模板、存储模板等功能。加密等级设置为 0 或 1 情况下支持此功能。
+    uint8_t PS_AutoEnrollBuffer[17] = { 0xEF, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x00, 0x08, 0x31, '\0', '\0', 0x04, 0x00, 0x16, '\0', '\0' };
+    // 休眠指令 0x33，设置传感器进入休眠模式。
+    uint8_t PS_SleepBuffer[12] = { 0xEF, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x00, 0x03, 0x33, 0x00, 0x37 };
+    // LED控制灯指令  0x3C，控制灯指令主要分为两类：一般指示灯和七彩编程呼吸灯。
+    // 指令说明                                                                                指令  功能   起始  结束  循环   校     验
+    uint8_t PS_BlueLEDBuffer[16] = { 0xEF, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x00, 0x07, 0x3C, 0x03, 0x01, 0x01, 0x00, 0x00, 0x49 };
+    uint8_t PS_RedLEDBuffer[16] = { 0xEF, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x00, 0x07, 0x3C, 0x02, 0x04, 0x04, 0x02, 0x00, 0x50 };
+    uint8_t PS_GreenLEDBuffer[16] = { 0xEF, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x00, 0x07, 0x3C, 0x02, 0x02, 0x02, 0x02, 0x00, 0x4C };
+    // 更多指令集请参见：http://file.yfrobot.com.cn/datasheet/FPM383C%E6%A8%A1%E7%BB%84%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE_V1.2.pdf
 
-    byte REG_T_ON[8] = {0xFF, 0xFF, REG_T_ON_2, REG_T_ON_3,
-                        0xFF, 0xFF, REG_T_ON_6, REG_T_ON_7
-                       };
-
-    byte REG_OFF[8] = {0xFF, 0xFF, REG_OFF_2, REG_OFF_3,
-                       0xFF, 0xFF, REG_OFF_6, REG_OFF_7
-                      };
-
-    byte REG_T_RISE[8] = {0xFF, 0xFF, 0xFF, REG_T_RISE_3,
-                          0xFF, 0xFF, 0xFF, REG_T_RISE_7
-                         };
-
-    byte REG_T_FALL[8] = {0xFF, 0xFF, 0xFF, REG_T_FALL_3,
-                          0xFF, 0xFF, 0xFF, REG_T_FALL_7
-                         };
-
-    // These private functions are not available to Arduino sketches.
-    // If you need to read or write directly to registers, consider
-    // putting the writeByte, readByte functions in the public section
-    TwoWire *_i2cPort;
-    uint8_t deviceAddress; // I2C Address of SX1508
-    // Pin definitions:
-    uint8_t pinInterrupt;
-    uint8_t pinOscillator;
-    uint8_t pinReset;
-    // Misc variables:
-    unsigned long _clkX;
-    // Read Functions:
-    uint8_t readByte(uint8_t registerAddress);
-
-    // Read Functions returning success or failure:
-    bool readBytes(uint8_t firstRegisterAddress, uint8_t *destination, uint8_t length);
-    bool readByte(uint8_t registerAddress, uint8_t *value);
-
-    // Write functions, returning success or failure:
-    bool writeByte(uint8_t registerAddress, uint8_t writeValue);
-    bool writeBytes(uint8_t firstRegisterAddress, uint8_t *writeArray, uint8_t length);
-
-    // Helper functions:
-    // calculateLEDTRegister - Try to estimate an LED on/off duration register,
-    // given the number of milliseconds and LED clock frequency.
-    uint8_t calculateLEDTRegister(uint8_t ms);
-    // calculateSlopeRegister - Try to estimate an LED rise/fall duration
-    // register, given the number of milliseconds and LED clock frequency.
-    uint8_t calculateSlopeRegister(uint8_t ms, uint8_t onIntensity, uint8_t offIntensity);
-
+    void sendData(int len, uint8_t PS_Databuffer[]);
+    void receiveData(uint16_t Timeout);
+    
   public:
     // -----------------------------------------------------------------------------
-    // Constructor - SX1508: This function sets up the pins connected to the
-    //		SX1508, and sets up the private deviceAddress variable.
+    // Constructor - YFROBOTFPM383: This function sets up the pins connected to the
+    //		YFROBOTFPM383, and sets up the private deviceAddress variable.
     // -----------------------------------------------------------------------------
-    SX1508();
+    YFROBOTFPM383();
     // Legacy below. Use 0-parameter constructor, and set these parameters in the
     // begin function:
-    SX1508(uint8_t address, uint8_t resetPin = 255, uint8_t interruptPin = 255, uint8_t oscillatorPin = 255);
+    YFROBOTFPM383(uint8_t address, uint8_t resetPin = 255, uint8_t interruptPin = 255, uint8_t oscillatorPin = 255);
 
     // -----------------------------------------------------------------------------
-    // begin(uint8_t address, uint8_t resetPin): This function initializes the SX1508.
+    // begin(uint8_t address, uint8_t resetPin): This function initializes the YFROBOTFPM383.
     //  	It requires wire to already be begun (previous versions did not do this), resets the IC, and tries to read some
     //  	registers to prove it's connected.
     // Inputs:
-    //		- address: should be the 7-bit address of the SX1508. This should be
+    //		- address: should be the 7-bit address of the YFROBOTFPM383. This should be
     //		 one of four values - 0x3E, 0x3F, 0x70, 0x71 - all depending on what the
     //		 ADDR0 and ADDR1 pins ar se to. This variable is required.
-    //		- resetPin: This is the Arduino pin tied to the SX1508 RST pin. This
+    //		- resetPin: This is the Arduino pin tied to the YFROBOTFPM383 RST pin. This
     //		 pin is optional. If not declared, the library will attempt to
-    //		 software reset the SX1508.
+    //		 software reset the YFROBOTFPM383.
     // Output: Returns a 1 if communication is successful, 0 on error.
     // -----------------------------------------------------------------------------
     uint8_t begin(uint8_t address = 0x3E, TwoWire &wirePort = Wire, uint8_t resetPin = 0xFF);
     uint8_t init(void); // Legacy -- use begin now
 
     // -----------------------------------------------------------------------------
-    // reset(bool hardware): This function resets the SX1508 - either a hardware
+    // reset(bool hardware): This function resets the YFROBOTFPM383 - either a hardware
     //		reset or software. A hardware reset (hardware parameter = 1) pulls the
     //		reset line low, pausing, then pulling the reset line high. A software
     //		reset writes a 0x12 then 0x34 to the REG_RESET as outlined in the
@@ -180,7 +88,7 @@ class SX1508
     void reset(bool hardware);
 
     // -----------------------------------------------------------------------------
-    // pinMode(uint8_t pin, uint8_t inOut): This function sets one of the SX1508's 16
+    // pinMode(uint8_t pin, uint8_t inOut): This function sets one of the YFROBOTFPM383's 16
     //		outputs to either an INPUT or OUTPUT.
     //
     //	Inputs:
@@ -198,7 +106,7 @@ class SX1508
     //		resistor (HIGH or LOW respectively).
     //
     //	Inputs:
-    //		- pin: The SX1508 pin number. Should be a value between 0 and 15.
+    //		- pin: The YFROBOTFPM383 pin number. Should be a value between 0 and 15.
     //		- highLow: should be Arduino's defined HIGH or LOW constants.
     // -----------------------------------------------------------------------------
     bool digitalWrite(uint8_t pin, uint8_t highLow);
@@ -209,7 +117,7 @@ class SX1508
     //		The pin should be configured as an INPUT, using the pinDir function.
     //
     //	Inputs:
-    //	 	- pin: The SX1508 pin to be read. should be a value between 0 and 15.
+    //	 	- pin: The YFROBOTFPM383 pin to be read. should be a value between 0 and 15.
     //  Outputs:
     //		This function returns a 1 if HIGH, 0 if LOW
     // -----------------------------------------------------------------------------
@@ -224,7 +132,7 @@ class SX1508
     //		functions on that pin.
     //
     //	Inputs:
-    //		- pin: The SX1508 pin connected to an LED. Should be 0-15.
+    //		- pin: The YFROBOTFPM383 pin connected to an LED. Should be 0-15.
     //   	- freq: Sets LED clock frequency divider.
     //		- log: selects either linear or logarithmic mode on the LED drivers
     //			- log defaults to 0, linear mode
@@ -238,7 +146,7 @@ class SX1508
     //		of an output pin connected to an LED.
     //
     //	Inputs:
-    //		- pin: The SX1508 pin connecte to an LED.Should be 0-15.
+    //		- pin: The YFROBOTFPM383 pin connecte to an LED.Should be 0-15.
     //		- iOn: should be a 0-255 value setting the intensity of the LED
     //			- 0 is completely off, 255 is 100% on.
     //
@@ -252,7 +160,7 @@ class SX1508
     //		tFall):  blink performs both the blink and breath LED driver functions.
     //
     // 	Inputs:
-    //  	- pin: the SX1508 pin (0-15) you want to set blinking/breathing.
+    //  	- pin: the YFROBOTFPM383 pin (0-15) you want to set blinking/breathing.
     //		- tOn: the amount of time the pin is HIGH
     //			- This value should be between 1 and 31. 0 is off.
     //		- tOff: the amount of time the pin is at offIntensity
@@ -278,7 +186,7 @@ class SX1508
     //  	Set a pin to blink output for estimated on/off millisecond durations.
     //
     // 	Inputs:
-    //  	- pin: the SX1508 pin (0-15) you want to set blinking
+    //  	- pin: the YFROBOTFPM383 pin (0-15) you want to set blinking
     //   	- tOn: estimated number of milliseconds the pin is LOW (LED sinking current will be on)
     //   	- tOff: estimated number of milliseconds the pin is HIGH (LED sinking current will be off)
     //   	- onIntensity: 0-255 value determining LED on brightness
@@ -296,7 +204,7 @@ class SX1508
     //  	estimated rise and fall durations.
     //
     // 	Inputs:
-    //  	- pin: the SX1508 pin (0-15) you want to set blinking
+    //  	- pin: the YFROBOTFPM383 pin (0-15) you want to set blinking
     //   	- tOn: estimated number of milliseconds the pin is LOW (LED sinking current will be on)
     //   	- tOff: estimated number of milliseconds the pin is HIGH (LED sinking current will be off)
     //   	- rise: estimated number of milliseconds the pin rises from LOW to HIGH
@@ -353,10 +261,10 @@ class SX1508
     void debounceTime(uint8_t time);
 
     // -----------------------------------------------------------------------------
-    // debouncePin(uint8_t pin): This method enables debounce on SX1508 input pin.
+    // debouncePin(uint8_t pin): This method enables debounce on YFROBOTFPM383 input pin.
     //
     //	Input:
-    //		- pin: The SX1508 pin to be debounced. Should be between 0 and 15.
+    //		- pin: The YFROBOTFPM383 pin to be debounced. Should be between 0 and 15.
     // -----------------------------------------------------------------------------
     void debouncePin(uint8_t pin);
     void debounceEnable(uint8_t pin); // Legacy, use debouncePin
@@ -374,11 +282,11 @@ class SX1508
 
     // -----------------------------------------------------------------------------
     // enableInterrupt(uint8_t pin, uint8_t riseFall): This function sets up an interrupt
-    //		on a pin. Interrupts can occur on all SX1508 pins, and can be generated
+    //		on a pin. Interrupts can occur on all YFROBOTFPM383 pins, and can be generated
     //		on rising, falling, or both.
     //
     //	Inputs:
-    //		-pin: SX1508 input pin that will generate an input. Should be 0-15.
+    //		-pin: YFROBOTFPM383 input pin that will generate an input. Should be 0-15.
     //		-riseFall: Configures if you want an interrupt generated on rise fall or
     //			both. For this param, send the pin-change values previously defined
     //			by Arduino:
@@ -448,4 +356,4 @@ class SX1508
     void clock(uint8_t oscSource = 2, uint8_t oscDivider = 1, uint8_t oscPinFunction = 0, uint8_t oscFreqOut = 0);
 };
 
-#endif // SX1508_library_H
+#endif // YFROBOTFPM383_H
