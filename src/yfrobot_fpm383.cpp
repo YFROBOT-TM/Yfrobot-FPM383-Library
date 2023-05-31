@@ -7,49 +7,12 @@
   Distributed as-is; no warranty is given.
 ******************************************************************************/
 
-#include "Arduino.h"
 #include "yfrobot_fpm383.h"
 
-YFROBOTFPM383::YFROBOTFPM383(uint8_t address, uint8_t resetPin, uint8_t interruptPin, uint8_t oscillatorPin)
+YFROBOTFPM383::YFROBOTFPM383(SoftwareSerial *softSerial)
 {
-    // Store the received parameters into member variables
-    deviceAddress = address;
-    pinInterrupt = interruptPin;
-    pinOscillator = oscillatorPin;
-    pinReset = resetPin;
-}
-
-uint8_t YFROBOTFPM383::begin(uint8_t address, TwoWire &wirePort, uint8_t resetPin)
-{
-    // Store the received parameters into member variables
-    _i2cPort = &wirePort;
-    deviceAddress = address;
-    pinReset = resetPin;
-
-    return init();
-}
-
-void YFROBOTFPM383::reset(bool hardware)
-{
-    // if hardware bool is set
-    if (hardware) {
-        // Check if bit 2 of REG_MISC is set
-        // if so nReset will not issue a POR, we'll need to clear that bit first
-        uint8_t regMisc = readByte(REG_MISC);
-        if (regMisc & (1 << 2)) {
-            regMisc &= ~(1 << 2);
-            writeByte(REG_MISC, regMisc);
-        }
-        // Reset the YFROBOTFPM383, the pin is active low
-        pinMode(pinReset, OUTPUT);	  // set reset pin as output
-        digitalWrite(pinReset, LOW);  // pull reset pin low
-        delay(1);					  // Wait for the pin to settle
-        digitalWrite(pinReset, HIGH); // pull reset pin back high
-    } else {
-        // Software reset command sequence:
-        writeByte(REG_RESET, 0x12);
-        writeByte(REG_RESET, 0x34);
-    }
+    _ss = softSerial;
+    _ss->begin(57600);
 }
 
 /**
@@ -59,10 +22,9 @@ void YFROBOTFPM383::reset(bool hardware)
   * @return  None
   */
 void YFROBOTFPM383::sendData(int len, uint8_t PS_Databuffer[]) {
-    mySerial.write(PS_Databuffer, len);
-    while (mySerial.read() >= 0)
+    _ss->write(PS_Databuffer, len);
+    while (_ss->read() >= 0)
         ;
-    // memset(PS_ReceiveBuffer, 0xFF, sizeof(PS_ReceiveBuffer));
 }
 
 /**
@@ -71,14 +33,15 @@ void YFROBOTFPM383::sendData(int len, uint8_t PS_Databuffer[]) {
   * @return  None
   */
 void YFROBOTFPM383::receiveData(uint16_t Timeout) {
+    memset(PS_ReceiveBuffer, 0xFF, sizeof(PS_ReceiveBuffer));  // 清空接收数据变量
     uint8_t i = 0;
-    while (mySerial.available() == 0 && (--Timeout)) {
+    while (_ss->available() == 0 && (--Timeout)) {
         delay(1);
     }
-    while (mySerial.available() > 0) {
+    while (_ss->available() > 0) {
         delay(2);
-        PS_ReceiveBuffer[i++] = mySerial.read();
-        if (i > 15) break;
+        PS_ReceiveBuffer[i++] = _ss->read();
+        if (i > 15) break;  // 超出16字节数据不接收
     }
 }
 
@@ -89,7 +52,7 @@ void YFROBOTFPM383::receiveData(uint16_t Timeout) {
   */
 void YFROBOTFPM383::sleep()
 {
-    FPM383C_SendData(12,PS_SleepBuffer);
+    sendData(12, PS_SleepBuffer);
 }
 
 /**
@@ -97,9 +60,9 @@ void YFROBOTFPM383::sleep()
   * @param   PS_ControlLEDBuffer[]：需要设置颜色的协议，一般定义在上面
   * @return  None
   */
-void YFROBOTFPM383::controlLED(uint8_t PS_ControlLEDBuffer[])
+void YFROBOTFPM383::controlLED( uint8_t PS_ControlLEDBuffer[] )
 {
-    FPM383C_SendData(16,PS_ControlLEDBuffer);
+    sendData(16, PS_ControlLEDBuffer);
 }
 
 /**
@@ -109,8 +72,8 @@ void YFROBOTFPM383::controlLED(uint8_t PS_ControlLEDBuffer[])
   */
 uint8_t YFROBOTFPM383::cancel()
 {
-    FPM383C_SendData(12,PS_CancelBuffer);
-    FPM383C_ReceiveData(2000);
+    sendData(12, PS_CancelBuffer);
+    receiveData(2000);
     return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
 }
 
@@ -121,8 +84,8 @@ uint8_t YFROBOTFPM383::cancel()
   */
 uint8_t YFROBOTFPM383::getImage()
 {
-    FPM383C_SendData(12,PS_GetImageBuffer);
-    FPM383C_ReceiveData(2000);
+    sendData(12, PS_GetImageBuffer);
+    receiveData(2000);
     return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
 }
 
@@ -131,23 +94,10 @@ uint8_t YFROBOTFPM383::getImage()
   * @param   None
   * @return  应答包第9位确认码或者无效值0xFF
   */
-uint8_t YFROBOTFPM383::getChar1()
+uint8_t YFROBOTFPM383::getChar()
 {
-    FPM383C_SendData(13,PS_GetChar1Buffer);
-    FPM383C_ReceiveData(2000);
-    return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
-}
-
-
-/**
-  * @brief   生成特征，存储到缓冲区2
-  * @param   None
-  * @return  应答包第9位确认码或者无效值0xFF
-  */
-uint8_t YFROBOTFPM383::getChar2()
-{
-    FPM383C_SendData(13,PS_GetChar2Buffer);
-    FPM383C_ReceiveData(2000);
+    sendData(13, PS_GetCharBuffer);
+    receiveData(2000);
     return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
 }
 
@@ -159,11 +109,26 @@ uint8_t YFROBOTFPM383::getChar2()
   */
 uint8_t YFROBOTFPM383::searchMB()
 {
-    FPM383C_SendData(17,PS_SearchMBBuffer);
-    FPM383C_ReceiveData(2000);
+    sendData(17, PS_SearchMBBuffer);
+    receiveData(2000);
     return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
 }
 
+/**
+  * @brief   删除指定指纹模板函数
+  * @param   PageID：需要删除的指纹ID号，取值0 - 49（FPM383F）
+  * @return  应答包第9位确认码或者无效值0xFF
+  */
+uint8_t YFROBOTFPM383::deleteID(uint16_t PageID)
+{
+    PS_DeleteBuffer[10] = (PageID>>8);
+    PS_DeleteBuffer[11] = (PageID);
+    PS_DeleteBuffer[14] = (0x15+PS_DeleteBuffer[10]+PS_DeleteBuffer[11])>>8;
+    PS_DeleteBuffer[15] = (0x15+PS_DeleteBuffer[10]+PS_DeleteBuffer[11]);
+    sendData(16, PS_DeleteBuffer);
+    receiveData(2000);
+    return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
+}
 
 /**
   * @brief   清空指纹模板函数
@@ -172,15 +137,15 @@ uint8_t YFROBOTFPM383::searchMB()
   */
 uint8_t YFROBOTFPM383::empty()
 {
-    FPM383C_SendData(12,PS_EmptyBuffer);
-    FPM383C_ReceiveData(2000);
+    sendData(12, PS_EmptyBuffer);
+    receiveData(2000);
     return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
 }
 
 
 /**
-  * @brief   自动注册指纹模板函数
-  * @param   PageID：注册指纹的ID号，取值0 - 59
+  * @brief   自动注册指纹模板函数, 默认采集4次
+  * @param   PageID：注册指纹的ID号，取值0 - 49（FPM383F）
   * @return  应答包第9位确认码或者无效值0xFF
   */
 uint8_t YFROBOTFPM383::autoEnroll(uint16_t PageID)
@@ -189,44 +154,27 @@ uint8_t YFROBOTFPM383::autoEnroll(uint16_t PageID)
     PS_AutoEnrollBuffer[11] = (PageID);
     PS_AutoEnrollBuffer[15] = (0x54+PS_AutoEnrollBuffer[10]+PS_AutoEnrollBuffer[11])>>8;
     PS_AutoEnrollBuffer[16] = (0x54+PS_AutoEnrollBuffer[10]+PS_AutoEnrollBuffer[11]);
-    FPM383C_SendData(17,PS_AutoEnrollBuffer);
-    FPM383C_ReceiveData(10000);
+    sendData(17, PS_AutoEnrollBuffer);
+    receiveData(10000);
     return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
 }
-
-
-/**
-  * @brief   删除指定指纹模板函数
-  * @param   PageID：需要删除的指纹ID号，取值0 - 59
-  * @return  应答包第9位确认码或者无效值0xFF
-  */
-uint8_t YFROBOTFPM383::delete(uint16_t PageID)
-{
-    PS_DeleteBuffer[10] = (PageID>>8);
-    PS_DeleteBuffer[11] = (PageID);
-    PS_DeleteBuffer[14] = (0x15+PS_DeleteBuffer[10]+PS_DeleteBuffer[11])>>8;
-    PS_DeleteBuffer[15] = (0x15+PS_DeleteBuffer[10]+PS_DeleteBuffer[11]);
-    FPM383C_SendData(16,PS_DeleteBuffer);
-    FPM383C_ReceiveData(2000);
-    return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
-}
-
 
 /**
   * @brief   二次封装自动注册指纹函数，实现注册成功闪烁两次绿灯，失败闪烁两次红灯
-  * @param   PageID：注册指纹的ID号，取值0 - 59
+  * @param   PageID：注册指纹的ID号，取值0 - 49（FPM383F）
   * @return  应答包第9位确认码或者无效值0xFF
   */
-/*，返回应答包的位9确认码。*/
 uint8_t YFROBOTFPM383::enroll(uint16_t PageID)
 {
-    if(PS_AutoEnroll(PageID) == 0x00)
-    {
-        PS_ControlLED(PS_GreenLEDBuffer);
-        return PS_ReceiveBuffer[9];
-    }
-    PS_ControlLED(PS_RedLEDBuffer);
-    return 0xFF;
+    uint8_t confirmationCode = autoEnroll(PageID);
+    Serial.println(confirmationCode);
+    if(confirmationCode == 0x00){
+        controlLED(PS_GreenLEDBuffer);
+        return confirmationCode;
+    }else{
+        controlLED(PS_BlueLEDBuffer);
+        return confirmationCode;
+    } 
 }
 
 
@@ -237,68 +185,62 @@ uint8_t YFROBOTFPM383::enroll(uint16_t PageID)
   */
 uint8_t YFROBOTFPM383::identify()
 {
-    if(PS_GetImage() == 0x00)
-    {
-        if(PS_GetChar1() == 0x00)
-        {
-            if(PS_SearchMB() == 0x00)
-            {
-                if(PS_ReceiveBuffer[8] == 0x07 && PS_ReceiveBuffer[9] == 0x00)
-                {
-                    PS_ControlLED(PS_GreenLEDBuffer);
-                    return PS_ReceiveBuffer[9];
+    if(getImage() == 0x00) {
+        if(getChar() == 0x00) {
+            if(searchMB() == 0x00) {
+                // uint8_t PackageID = PS_ReceiveBuffer[6];
+                if(PS_ReceiveBuffer[6] == 0x07) {
+                    // static uint8_t confirmationCode = PS_ReceiveBuffer[9];
+                    if(PS_ReceiveBuffer[9] == 0x00) {
+                        controlLED(PS_GreenLEDBuffer);
+                        return PS_ReceiveBuffer[9];
+                    }
                 }
+            } else {
+                controlLED(PS_RedLEDBuffer);
             }
         }
     }
-    ErrorNum++;
-    PS_ControlLED(PS_RedLEDBuffer);
     return 0xFF;
 }
 
 
 /**
-  * @brief   搜索指纹后的应答包校验，在此执行相应的功能，如开关继电器、开关灯等等功能
+  * @brief   获取搜索指纹ID
   * @param   ACK：各个功能函数返回的应答包
   * @return  None
   */
-void YFROBOTFPM383::SEARCH_ACK_CHECK(uint8_t ACK)
+uint8_t YFROBOTFPM383::getSearchID(uint8_t ACK)
 {
-	if(PS_ReceiveBuffer[6] == 0x07)
-	{
-		switch (ACK)
-		{
-			case 0x00:                          //指令正确
-                SearchID = (int)((PS_ReceiveBuffer[10] << 8) + PS_ReceiveBuffer[11]);
-                sprintf(str,"Now Search ID: %d",(int)SearchID);
-                Blinker.notify(str);
-                if(SearchID == 0) WiFi_Connected_State = 0;
-                digitalWrite(12,!digitalRead(12));
-                if(ErrorNum < 5) ErrorNum = 0;
-				break;
-		}
-	}
-  for(int i=0;i<20;i++) PS_ReceiveBuffer[i] = 0xFF;
+	if (ACK == 0x00)
+    {
+        int SearchID = (int)((PS_ReceiveBuffer[10] << 8) + PS_ReceiveBuffer[11]);
+        // sprintf(str,"Now Search ID: %d",(int)SearchID);
+        // Blinker.notify((int)SearchID);
+        // if(SearchID == 0) WiFi_Connected_State = 0;
+        return SearchID;
+    }
+    return 0xFF;
 }
 
 
-/**
-  * @brief   注册指纹后返回的应答包校验
-  * @param   ACK：注册指纹函数返回的应答包
-  * @return  None
-  */
-void YFROBOTFPM383::ENROLL_ACK_CHECK(uint8_t ACK)
-{
-	if(PS_ReceiveBuffer[6] == 0x07)
-	{
-		switch (ACK)
-		{
-			case 0x00:                          //指令正确
-                EnrollID = (int)((PS_AutoEnrollBuffer[10] << 8) + PS_AutoEnrollBuffer[11]);
-                sprintf(str,"Now Enroll ID: %d",(int)EnrollID);
-                Blinker.notify(str);
-				break;
-		}
-	}
-  for(int i=0;i<20;i++) PS_ReceiveBuffer[i] = 0xFF;
-}
+// /**
+//   * @brief   注册指纹后返回的应答包校验
+//   * @param   ACK：注册指纹函数返回的应答包
+//   * @return  None
+//   */
+// void YFROBOTFPM383::ENROLL_ACK_CHECK(uint8_t ACK)
+// {
+//     if(PS_ReceiveBuffer[6] == 0x07)
+//     {
+//         switch (ACK)
+//         {
+//             case 0x00:                          //指令正确
+//                 EnrollID = (int)((PS_AutoEnrollBuffer[10] << 8) + PS_AutoEnrollBuffer[11]);
+//                 // sprintf(str,"Now Enroll ID: %d",(int)EnrollID);
+//                 // Blinker.notify((int)EnrollID);
+//                 break;
+//         }
+//     }
+//     for(int i=0;i<20;i++) PS_ReceiveBuffer[i] = 0xFF;
+// }

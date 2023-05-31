@@ -10,22 +10,23 @@ YFROBOT FPM383 Sensor Library for Arduino
 #### 库使用说明：
 调用库：
 
-`#include <YFLineFollow.h>   // 包含头文件`
+`#include <yfrobot_fpm383.h>   // 包含头文件`
 
 创建对象：
 
-`YFLINEFOLLOW YFLS;`
+`SoftwareSerial mySerial(9, 8);  //软串口引脚，RX：D9    TX：D8
+YFROBOTFPM383 fpm(&mySerial);`
 
 Methods：
 
 初始化，成功则返回1。
 
-`YFLS.begin();`
+`fpm.begin();`
 
 读取传感器，lineSensor值可为 0、1、2、3、4；分别对应5路传感器；lineSensor值可为 0、1、2、3、4、5、6；分别对应7路传感器；
 有反射返回值为1，无反射返回值0。
 
-`YFLS.readSensor(lineSensor)`
+`fpm.identify()`
 
 禁用/使能传感器，默认使能。
 
