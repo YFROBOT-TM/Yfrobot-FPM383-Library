@@ -39,10 +39,55 @@ void YFROBOTFPM383::receiveData(uint16_t Timeout) {
         delay(1);
     }
     while (_ss->available() > 0) {
-        delay(2);
+        delay(1);
         PS_ReceiveBuffer[i++] = _ss->read();
-        if (i > 15) break;  // 超出16字节数据不接收
+        if (i > 50) break;  // 超出50字节数据不接收
     }
+}
+
+/**
+  * @brief   初始化，接收到模组数据0x55则表示初始化完成 (无用，模块只有在首次上电时会发送0x55，实际使用延时等待模组初始化即可)
+  * @param   None
+  * @return  bool
+  */
+bool YFROBOTFPM383::begin()
+{
+    receiveData(1000);
+    if(PS_ReceiveBuffer[0] == 0x55){
+        return true;
+    }
+    return false;
+}
+
+/**
+  * @brief   等待初始化，并获取模组型号，建议在setup中使用
+  * @param   None
+  * @return  bool
+  */
+String YFROBOTFPM383::getChipSN()
+{
+    delay(200);  //等待指纹识别模块初始化完成，不可去掉，此期间不能响应命令
+    sendData(13, PS_GetChipSN);
+    receiveData(1000);
+    if( PS_ReceiveBuffer[6] == 0x07 && PS_ReceiveBuffer[9] == 0x00 ) {
+        uint8_t CSN[10];
+        for(int i = 0; i < 9; i++){
+            CSN[i] =  PS_ReceiveBuffer[i+10];
+        }
+        return HexToString(CSN, 9);
+    }
+    return "";
+}
+
+String YFROBOTFPM383::HexToString(uint8_t* data, uint8_t length) {
+    if (!data || !length) { return ""; }
+    String result = "";
+    for (uint8_t i = 0; i < length; i++) {
+        // uint8_t my_hex = 0x50;
+        // String my_char = String((char)my_hex) //output "P"
+        result += String((char)data[i]) ;
+    }
+    return result;
 }
 
 /**
@@ -148,15 +193,22 @@ uint8_t YFROBOTFPM383::empty()
   * @param   PageID：注册指纹的ID号，取值0 - 49（FPM383F）
   * @return  应答包第9位确认码或者无效值0xFF
   */
-uint8_t YFROBOTFPM383::autoEnroll(uint16_t PageID)
+uint8_t * YFROBOTFPM383::autoEnroll(uint16_t PageID)
 {
+    static uint8_t backData[3] = {0xFF,0xFF,0xFF};
     PS_AutoEnrollBuffer[10] = (PageID>>8);
     PS_AutoEnrollBuffer[11] = (PageID);
-    PS_AutoEnrollBuffer[15] = (0x54+PS_AutoEnrollBuffer[10]+PS_AutoEnrollBuffer[11])>>8;
-    PS_AutoEnrollBuffer[16] = (0x54+PS_AutoEnrollBuffer[10]+PS_AutoEnrollBuffer[11]);
+    PS_AutoEnrollBuffer[15] = (PS_AutoEnrollBuffer_Check+PS_AutoEnrollBuffer[10]+PS_AutoEnrollBuffer[11])>>8;
+    PS_AutoEnrollBuffer[16] = (PS_AutoEnrollBuffer_Check+PS_AutoEnrollBuffer[10]+PS_AutoEnrollBuffer[11]);
     sendData(17, PS_AutoEnrollBuffer);
     receiveData(10000);
-    return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
+    // return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
+    if(PS_ReceiveBuffer[6] == 0x07){
+        backData[0] = PS_ReceiveBuffer[9];
+        backData[1] = PS_ReceiveBuffer[10];
+        backData[2] = PS_ReceiveBuffer[11];
+    }
+    return backData;
 }
 
 /**
@@ -165,18 +217,27 @@ uint8_t YFROBOTFPM383::autoEnroll(uint16_t PageID)
   * @return  应答包第9位确认码或者无效值0xFF
   */
 uint8_t YFROBOTFPM383::enroll(uint16_t PageID)
-{
-    uint8_t confirmationCode = autoEnroll(PageID);
-    Serial.println(confirmationCode);
-    if(confirmationCode == 0x00){
-        controlLED(PS_GreenLEDBuffer);
-        return confirmationCode;
-    }else{
-        controlLED(PS_BlueLEDBuffer);
-        return confirmationCode;
-    } 
+{   
+    controlLED(PS_BlueLEDBuffer); // 点亮蓝灯，注册开始
+    delay(10);
+    uint8_t *confirmationCode = autoEnroll(PageID);
+    // Serial.print(confirmationCode[0]);
+    // Serial.print(" ");
+    // Serial.print(confirmationCode[1]);
+    // Serial.print(" ");
+    // Serial.println(confirmationCode[2]);
+    if(confirmationCode[0] == 0x00 &&confirmationCode[1] == 0x06 &&confirmationCode[2] == 0xf2  ){
+        controlLED(PS_GreenLEDBuffer); // 绿灯闪烁，注册成功
+        Serial.println("ok");
+        return 0x00;
+    }else if(confirmationCode[0] == 0x22 &&confirmationCode[1] == 0x00 &&confirmationCode[2] == 0x00  ){
+        controlLED(PS_OFFLEDBuffer);
+        return 0x01;
+    } else {
+        controlLED(PS_OFFLEDBuffer);
+        return 0xff;
+    }
 }
-
 
 /**
   * @brief   分步式命令搜索指纹函数
@@ -187,20 +248,30 @@ uint8_t YFROBOTFPM383::identify()
 {
     if(getImage() == 0x00) {
         if(getChar() == 0x00) {
-            if(searchMB() == 0x00) {
+            uint8_t sMB = searchMB();
+            // Serial.println(sMB);
+            if(sMB == 0x00) {
                 // uint8_t PackageID = PS_ReceiveBuffer[6];
                 if(PS_ReceiveBuffer[6] == 0x07) {
                     // static uint8_t confirmationCode = PS_ReceiveBuffer[9];
                     if(PS_ReceiveBuffer[9] == 0x00) {
                         controlLED(PS_GreenLEDBuffer);
-                        return PS_ReceiveBuffer[9];
+                        // int SearchID = (int)((PS_ReceiveBuffer[10] << 8) + PS_ReceiveBuffer[11]);
+                        int SearchID = (int)(PS_ReceiveBuffer[11]);
+                        return SearchID; // 此模组最大支持49个指纹库，所以直接返回第11位码即可；ID码有2字节
                     }
                 }
+            } else if (sMB == 0x17){
+                controlLED(PS_BlueLEDBuffer);
+                // return 0x17;
             } else {
                 controlLED(PS_RedLEDBuffer);
             }
         }
+    } else if(getImage() == 0x02) { // 无手指
+        controlLED(PS_COLORLEDBuffer);
     }
+
     return 0xFF;
 }
 
@@ -219,6 +290,8 @@ uint8_t YFROBOTFPM383::getSearchID(uint8_t ACK)
         // Blinker.notify((int)SearchID);
         // if(SearchID == 0) WiFi_Connected_State = 0;
         return SearchID;
+    } else {
+
     }
     return 0xFF;
 }
