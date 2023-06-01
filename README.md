@@ -19,24 +19,30 @@ YFROBOTFPM383 fpm(&mySerial);`
 
 Methods：
 
-初始化，成功则返回1。
+初始化，成功则返回模组序列号(String)，否则返回""。
 
-`fpm.begin();`
+`fpm.getChipSN();`
 
-读取传感器，lineSensor值可为 0、1、2、3、4；分别对应5路传感器；lineSensor值可为 0、1、2、3、4、5、6；分别对应7路传感器；
-有反射返回值为1，无反射返回值0。
+验证指纹，并返回指纹ID
 
 `fpm.identify()`
 
-禁用/使能传感器，默认使能。
+在ID位置注册指纹
 
-`YFLS.enableSensor();`
+`fpm.enroll(ID);`
 
-`YFLS.disableSensor();`
+
+删除ID位置的指纹
+
+`fpm.deleteID(ID);`
+
+清空指纹库
+
+`fpm.empty();`
 
 
 ## 更新日志 Release Note
-* V0.0.1  基础功能完成
+* V0.0.1  基础功能完成，验证指纹，删除指纹，添加指纹。
 
 ## 联系我们 Contact Us
 * http://www.yfrobot.com.cn/wiki/index.php?title=%E8%81%94%E7%B3%BB%E6%88%91%E4%BB%AC

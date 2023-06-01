@@ -276,25 +276,25 @@ uint8_t YFROBOTFPM383::identify()
 }
 
 
-/**
-  * @brief   获取搜索指纹ID
-  * @param   ACK：各个功能函数返回的应答包
-  * @return  None
-  */
-uint8_t YFROBOTFPM383::getSearchID(uint8_t ACK)
-{
-	if (ACK == 0x00)
-    {
-        int SearchID = (int)((PS_ReceiveBuffer[10] << 8) + PS_ReceiveBuffer[11]);
-        // sprintf(str,"Now Search ID: %d",(int)SearchID);
-        // Blinker.notify((int)SearchID);
-        // if(SearchID == 0) WiFi_Connected_State = 0;
-        return SearchID;
-    } else {
+// /**
+//   * @brief   获取搜索指纹ID
+//   * @param   ACK：各个功能函数返回的应答包
+//   * @return  None
+//   */
+// uint8_t YFROBOTFPM383::getSearchID(uint8_t ACK)
+// {
+// 	if (ACK == 0x00)
+//     {
+//         int SearchID = (int)((PS_ReceiveBuffer[10] << 8) + PS_ReceiveBuffer[11]);
+//         // sprintf(str,"Now Search ID: %d",(int)SearchID);
+//         // Blinker.notify((int)SearchID);
+//         // if(SearchID == 0) WiFi_Connected_State = 0;
+//         return SearchID;
+//     } else {
 
-    }
-    return 0xFF;
-}
+//     }
+//     return 0xFF;
+// }
 
 
 // /**

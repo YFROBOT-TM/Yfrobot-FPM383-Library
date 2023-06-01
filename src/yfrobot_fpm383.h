@@ -105,7 +105,7 @@ class YFROBOTFPM383
     uint8_t deleteID(uint16_t PageID);
     uint8_t enroll(uint16_t PageID);
     uint8_t identify();
-    uint8_t getSearchID(uint8_t ACK);
+    // uint8_t getSearchID(uint8_t ACK);
     // void ENROLL_ACK_CHECK(uint8_t ACK);
 
 };
