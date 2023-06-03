@@ -24,12 +24,15 @@ Methods：
 `fpm.getChipSN();`
 
 验证指纹，并返回指纹ID
+参数：true，无手指时，LED反馈；false，无手指时，无LED反馈。
 
 `fpm.identify()`
 
 在ID位置注册指纹
+参数：注册ID，默认拼接4次（可自定义次数）。
 
-`fpm.enroll(ID);`
+`fpm.enroll(ID);` 
+`fpm.enroll(ID, 6);`
 
 
 删除ID位置的指纹
