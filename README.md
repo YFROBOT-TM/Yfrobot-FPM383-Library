@@ -42,7 +42,11 @@ Methods：
 
 
 ## 更新日志 Release Note
-* V0.0.1  基础功能完成，验证指纹，删除指纹，添加指纹。
+* V0.0.2    优化LED控制，增加多种LED状态；
+            优化验证指纹，增加无指纹时，LED灯控制参数；
+            优化添加指纹，增加参数，可控指纹拼接次数；
+            新增LED自由控制函数。
+* V0.0.1    基础功能完成，验证指纹，删除指纹，添加指纹。
 
 ## 联系我们 Contact Us
 * http://www.yfrobot.com.cn/wiki/index.php?title=%E8%81%94%E7%B3%BB%E6%88%91%E4%BB%AC

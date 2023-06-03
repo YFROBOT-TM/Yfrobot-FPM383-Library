@@ -111,6 +111,36 @@ void YFROBOTFPM383::controlLED( uint8_t PS_ControlLEDBuffer[] )
 }
 
 /**
+  * @brief   模块LED灯用户自由控制控制函数
+  * @param   fun：LED 灯模式控制位，1-普通呼吸灯，2-闪烁灯，3-常开灯，4-常闭灯，5-渐开灯，6-渐闭灯，其他功能码不适用于此指令包格式；
+  * @param   start：设置为普通呼吸灯时，由灭到亮的颜色，只限于普通呼吸灯（功能码 01）功能，其他功能时，与结束颜色保持一致。
+  *                 其中，bit0 是蓝灯控制位；bit1 是绿灯控制位；bit2 是红灯控制位。置 1 灯亮，置 0 灯灭。
+  *                 例如 0x01_蓝灯亮，0x02_绿灯亮，0x04_红灯亮，0x06_红绿灯亮，0x05_红蓝灯亮，0x03_绿蓝灯亮，0x07_红绿蓝灯亮，0x00_全灭；
+  * @param   end：结束颜色：设置为普通呼吸灯时，由亮到灭的颜色，只限于普通呼吸灯（功能码 0x01），其他功能时，与起始颜色保持一致。设置方式与起始颜色一样；
+  * @param   cycle：循环次数：表示呼吸或者闪烁灯的次数。当设为 0 时，表示无限循环，当设为其他值时，表示呼吸有限次数。
+  *                 循环次数适用于呼吸、闪烁功能，其他功能中无效，例如在常开、常闭、渐开和渐闭中是无效的；
+  * @return  None
+  */
+void YFROBOTFPM383::controlLEDC( uint8_t fun, uint8_t start, uint8_t end, uint8_t cycle )
+{
+    uint16_t checksum = 0x44;
+    PS_CustomLEDBuffer[10] = (fun);
+    checksum += fun;
+    PS_CustomLEDBuffer[11] = (start);
+    checksum += start;
+    PS_CustomLEDBuffer[12] = (end);
+    checksum += end;
+    PS_CustomLEDBuffer[13] = (cycle);
+    checksum += cycle;
+    PS_CustomLEDBuffer[14] = checksum >> 8;
+    PS_CustomLEDBuffer[15] = checksum;
+    // for(int i = 10;i<=15;i++){
+    //     Serial.println(PS_CustomLEDBuffer[i]);
+    // }
+    sendData(16, PS_CustomLEDBuffer);
+}
+
+/**
   * @brief   模块任务取消操作函数，如发送了注册指纹命令，但是不想注册了，需要发送此函数
   * @param   None
   * @return  应答包第9位确认码或者无效值0xFF
@@ -191,20 +221,23 @@ uint8_t YFROBOTFPM383::empty()
 /**
   * @brief   自动注册指纹模板函数, 默认采集4次
   * @param   PageID：注册指纹的ID号，取值0 - 49（FPM383F）
+  * @param   entriesCount：录入（拼接）次数，取值1~12，推荐4~6
   * @return  应答包第9位确认码或者无效值0xFF
   */
-uint8_t * YFROBOTFPM383::autoEnroll(uint16_t PageID)
+uint8_t * YFROBOTFPM383::autoEnroll(uint16_t PageID, uint8_t entriesCount = 4)
 {
     static uint8_t backData[3] = {0xFF,0xFF,0xFF};
+    uint8_t eC = entriesCount > 12 ? 12 : entriesCount;
     PS_AutoEnrollBuffer[10] = (PageID>>8);
     PS_AutoEnrollBuffer[11] = (PageID);
-    PS_AutoEnrollBuffer[15] = (PS_AutoEnrollBuffer_Check+PS_AutoEnrollBuffer[10]+PS_AutoEnrollBuffer[11])>>8;
-    PS_AutoEnrollBuffer[16] = (PS_AutoEnrollBuffer_Check+PS_AutoEnrollBuffer[10]+PS_AutoEnrollBuffer[11]);
+    PS_AutoEnrollBuffer[12] = (eC);
+    PS_AutoEnrollBuffer[15] = (PS_AutoEnrollBuffer_Check+PS_AutoEnrollBuffer[10]+PS_AutoEnrollBuffer[11]+PS_AutoEnrollBuffer[12])>>8;
+    PS_AutoEnrollBuffer[16] = (PS_AutoEnrollBuffer_Check+PS_AutoEnrollBuffer[10]+PS_AutoEnrollBuffer[11]+PS_AutoEnrollBuffer[12]);
     sendData(17, PS_AutoEnrollBuffer);
     receiveData(10000);
     // return PS_ReceiveBuffer[6] == 0x07 ? PS_ReceiveBuffer[9] : 0xFF;
     if(PS_ReceiveBuffer[6] == 0x07){
-        backData[0] = PS_ReceiveBuffer[9];
+        backData[0] = PS_ReceiveBuffer[9]; 
         backData[1] = PS_ReceiveBuffer[10];
         backData[2] = PS_ReceiveBuffer[11];
     }
@@ -216,11 +249,11 @@ uint8_t * YFROBOTFPM383::autoEnroll(uint16_t PageID)
   * @param   PageID：注册指纹的ID号，取值0 - 49（FPM383F）
   * @return  应答包第9位确认码或者无效值0xFF
   */
-uint8_t YFROBOTFPM383::enroll(uint16_t PageID)
+uint8_t YFROBOTFPM383::enroll(uint16_t PageID, uint8_t entriesCount = 4)
 {   
     controlLED(PS_BlueLEDBuffer); // 点亮蓝灯，注册开始
     delay(10);
-    uint8_t *confirmationCode = autoEnroll(PageID);
+    uint8_t *confirmationCode = autoEnroll(PageID, entriesCount);
     // Serial.print(confirmationCode[0]);
     // Serial.print(" ");
     // Serial.print(confirmationCode[1]);
@@ -231,8 +264,8 @@ uint8_t YFROBOTFPM383::enroll(uint16_t PageID)
         Serial.println("ok");
         return 0x00;
     }else if(confirmationCode[0] == 0x22 &&confirmationCode[1] == 0x00 &&confirmationCode[2] == 0x00  ){
-        controlLED(PS_OFFLEDBuffer);
-        return 0x01;
+        controlLED(PS_RedLEDLOOPBuffer);
+        return 0x01; // 该ID已注册指纹循环闪烁红灯
     } else {
         controlLED(PS_OFFLEDBuffer);
         return 0xff;
@@ -244,17 +277,17 @@ uint8_t YFROBOTFPM383::enroll(uint16_t PageID)
   * @param   None
   * @return  应答包第9位确认码或者无效值0xFF
   */
-uint8_t YFROBOTFPM383::identify()
+uint8_t YFROBOTFPM383::identify(bool NoFingerLED)
 {
     if(getImage() == 0x00) {
         if(getChar() == 0x00) {
             uint8_t sMB = searchMB();
             // Serial.println(sMB);
-            if(sMB == 0x00) {
+            if(sMB == 0x00) { // 搜索到认证手指时，解析返回数据
                 // uint8_t PackageID = PS_ReceiveBuffer[6];
                 if(PS_ReceiveBuffer[6] == 0x07) {
                     // static uint8_t confirmationCode = PS_ReceiveBuffer[9];
-                    if(PS_ReceiveBuffer[9] == 0x00) {
+                    if(PS_ReceiveBuffer[9] == 0x00) {     // 返回数据校验正确，则识别正常，返回指纹ID并闪烁绿灯两次
                         controlLED(PS_GreenLEDBuffer);
                         // int SearchID = (int)((PS_ReceiveBuffer[10] << 8) + PS_ReceiveBuffer[11]);
                         int SearchID = (int)(PS_ReceiveBuffer[11]);
@@ -262,14 +295,17 @@ uint8_t YFROBOTFPM383::identify()
                     }
                 }
             } else if (sMB == 0x17){
-                controlLED(PS_BlueLEDBuffer);
+                // controlLED(PS_BlueLEDBuffer);
                 // return 0x17;
-            } else {
+            } else { // 搜索到未认证手指时，闪烁红灯两次
                 controlLED(PS_RedLEDBuffer);
             }
         }
-    } else if(getImage() == 0x02) { // 无手指
-        controlLED(PS_COLORLEDBuffer);
+    } else if(getImage() == 0x02) { // 无手指时，NoFingerLED == true 闪烁红绿色灯一次
+        if ( NoFingerLED )
+        {
+            controlLED(PS_RGLEDBlinkBuffer);
+        }
     }
 
     return 0xFF;
