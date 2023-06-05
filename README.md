@@ -49,6 +49,7 @@ Methods：
 
 
 ## 更新日志 Release Note
+* V0.0.4    更改library.properties文件。
 * V0.0.3    新增已注册指纹(有效模板)查询函数。
 * V0.0.2    优化LED控制，增加多种LED状态；
             优化验证指纹，增加无指纹时，LED灯控制参数；
