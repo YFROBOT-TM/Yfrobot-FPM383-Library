@@ -312,6 +312,19 @@ uint8_t YFROBOTFPM383::identify(bool NoFingerLED)
 }
 
 
+/**
+  * @brief   读取有效模板个数，查询当前已注册指纹数量
+  * @param   None
+  * @return  应答包第11位有效数量或者无效值0xFF
+  */
+uint8_t YFROBOTFPM383::inquiry()
+{
+    sendData(12, PS_ValidTempleteNumBuffer);
+    receiveData(2000);
+    return PS_ReceiveBuffer[9] == 0x00 ? PS_ReceiveBuffer[11] : 0xFF;
+}
+
+
 // /**
 //   * @brief   获取搜索指纹ID
 //   * @param   ACK：各个功能函数返回的应答包
