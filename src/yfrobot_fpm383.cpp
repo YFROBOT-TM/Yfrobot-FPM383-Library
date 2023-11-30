@@ -224,7 +224,7 @@ uint8_t YFROBOTFPM383::empty()
   * @param   entriesCount：录入（拼接）次数，取值1~12，推荐4~6
   * @return  应答包第9位确认码或者无效值0xFF
   */
-uint8_t * YFROBOTFPM383::autoEnroll(uint16_t PageID, uint8_t entriesCount = 4)
+uint8_t * YFROBOTFPM383::autoEnroll(uint16_t PageID, uint8_t entriesCount)
 {
     static uint8_t backData[3] = {0xFF,0xFF,0xFF};
     uint8_t eC = entriesCount > 12 ? 12 : entriesCount;
@@ -249,7 +249,7 @@ uint8_t * YFROBOTFPM383::autoEnroll(uint16_t PageID, uint8_t entriesCount = 4)
   * @param   PageID：注册指纹的ID号，取值0 - 49（FPM383F）
   * @return  应答包第9位确认码或者无效值0xFF
   */
-uint8_t YFROBOTFPM383::enroll(uint16_t PageID, uint8_t entriesCount = 4)
+uint8_t YFROBOTFPM383::enroll(uint16_t PageID, uint8_t entriesCount)
 {   
     controlLED(PS_BlueLEDBuffer); // 点亮蓝灯，注册开始
     delay(10);
