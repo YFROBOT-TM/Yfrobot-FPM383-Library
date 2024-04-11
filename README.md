@@ -14,8 +14,11 @@ YFROBOT FPM383 Sensor Library for Arduino
 
 创建对象：
 
-`SoftwareSerial mySerial(9, 8);  //软串口引脚，RX：D9    TX：D8
-YFROBOTFPM383 fpm(&mySerial);`
+UNO 主板：
+`YFROBOTFPM383 fpm(9, 8);  //软串口引脚，RX：D9    TX：D8`
+
+ESP32 主板：
+`YFROBOTFPM383 fpm(16, 17); // 使用 ESP32 的硬件串口2，自定义引脚RX：16    TX：17`
 
 Methods：
 
@@ -31,7 +34,7 @@ Methods：
 在ID位置注册指纹
 参数：注册ID，默认拼接4次（可自定义次数）。
 
-`fpm.enroll(ID);` 
+`fpm.enroll(ID, 4);` 
 `fpm.enroll(ID, 6);`
 
 
@@ -49,6 +52,7 @@ Methods：
 
 
 ## 更新日志 Release Note
+* V0.0.5    适配ESP32系列主板，测试在ESP32-WROOM-32E。Update Date: 04-11-2024
 * V0.0.4    更改library.properties文件。
 * V0.0.3    新增已注册指纹(有效模板)查询函数。
 * V0.0.2    优化LED控制，增加多种LED状态；

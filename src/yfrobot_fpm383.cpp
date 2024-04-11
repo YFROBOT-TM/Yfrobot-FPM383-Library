@@ -1,7 +1,7 @@
 /******************************************************************************
   yfrobot_fpm383.cpp
   YFROBOT FPM383 Sensor Library Source File
-  Creation Date: 05-31-2023
+  Update Date: 04-11-2024
   @ YFROBOT
 
   Distributed as-is; no warranty is given.
@@ -9,10 +9,33 @@
 
 #include "yfrobot_fpm383.h"
 
-YFROBOTFPM383::YFROBOTFPM383(SoftwareSerial *softSerial)
+
+YFROBOTFPM383::YFROBOTFPM383(int rxPin, int txPin)
 {
-    _ss = softSerial;
+    // _ss = serial;
+    // _ss->begin(57600, rxPin, txPin);
+
+    this->_pin_rx = rxPin;
+    this->_pin_tx = txPin;
+
+#ifdef __AVR__    // AVR 软件串口库 自定义引脚
+    // 初始化软件串口通信设置
+    // 这可能包括设置引脚为输入/输出，初始化通信速率等
+    pinMode(this->_pin_rx, INPUT);
+    pinMode(this->_pin_tx, OUTPUT);
+    _ss = new SERIAL_CLASS(this->_pin_rx,  this->_pin_tx);
     _ss->begin(57600);
+
+#elif defined(ESP32)    // ESP32 硬件串口2 自定义引脚
+    // 初始化 ESP32 的硬件串口2
+    _ss = new HardwareSerial(2);
+    // 设置引脚为输入输出模式
+    pinMode(this->_pin_rx, INPUT);
+    pinMode(this->_pin_tx, OUTPUT);
+    // 开始串口通信
+    _ss->begin(57600, SERIAL_8N1, this->_pin_rx,  this->_pin_tx);
+#endif
+
 }
 
 /**
@@ -224,7 +247,7 @@ uint8_t YFROBOTFPM383::empty()
   * @param   entriesCount：录入（拼接）次数，取值1~12，推荐4~6
   * @return  应答包第9位确认码或者无效值0xFF
   */
-uint8_t * YFROBOTFPM383::autoEnroll(uint16_t PageID, uint8_t entriesCount = 4)
+uint8_t * YFROBOTFPM383::autoEnroll(uint16_t PageID, uint8_t entriesCount)
 {
     static uint8_t backData[3] = {0xFF,0xFF,0xFF};
     uint8_t eC = entriesCount > 12 ? 12 : entriesCount;
@@ -249,7 +272,7 @@ uint8_t * YFROBOTFPM383::autoEnroll(uint16_t PageID, uint8_t entriesCount = 4)
   * @param   PageID：注册指纹的ID号，取值0 - 49（FPM383F）
   * @return  应答包第9位确认码或者无效值0xFF
   */
-uint8_t YFROBOTFPM383::enroll(uint16_t PageID, uint8_t entriesCount = 4)
+uint8_t YFROBOTFPM383::enroll(uint16_t PageID, uint8_t entriesCount)
 {   
     controlLED(PS_BlueLEDBuffer); // 点亮蓝灯，注册开始
     delay(10);

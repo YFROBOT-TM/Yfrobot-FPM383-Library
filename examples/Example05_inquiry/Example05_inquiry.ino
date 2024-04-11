@@ -6,21 +6,16 @@
 
   Author     : YFROBOT ZL
   Website    : www.yfrobot.com.cn
-  Create Time: 2023-05-30
+  update Time: 2024-04-11
 */
 
-#include <SoftwareSerial.h>
 #include "yfrobot_fpm383.h"
 
-SoftwareSerial mySerial(9, 8);  //软串口引脚，RX：D9    TX：D8
-YFROBOTFPM383 fpm(&mySerial);
-int MODEPIN = 3;
-int LEDPIN = 13;
+YFROBOTFPM383 fpm(9, 8);  //软串口引脚，RX：D9    TX：D8
 
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
-  pinMode(LEDPIN, OUTPUT);
 
   // 初始化
   while (fpm.getChipSN() == "") {

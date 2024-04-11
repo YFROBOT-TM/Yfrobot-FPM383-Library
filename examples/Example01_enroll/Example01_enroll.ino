@@ -9,14 +9,12 @@
 
   Author     : YFROBOT ZL
   Website    : www.yfrobot.com.cn
-  Create Time: 2023-05-30
+  update Time: 2024-04-11
 */
 
-#include <SoftwareSerial.h>
 #include "yfrobot_fpm383.h"
 
-SoftwareSerial mySerial(9, 8);  //软串口引脚，RX：D9    TX：D8
-YFROBOTFPM383 fpm(&mySerial);
+YFROBOTFPM383 fpm(9, 8);  //软串口引脚，RX：D9    TX：D8
 
 int ENROLLID_1 = 0;  // 在此位置注册指纹
 int flag_enroll = 255;

@@ -1,7 +1,7 @@
 /******************************************************************************
   yfrobot_fpm383.h
   YFROBOT FPM383 Sensor Library Source File
-  Creation Date: 05-31-2023
+  Update Date: 04-11-2024
   @ YFROBOT
 
   Distributed as-is; no warranty is given.
@@ -11,7 +11,17 @@
 #define YFROBOTFPM383_H
 
 #include "Arduino.h"
+// #include <SoftwareSerial.h>
+
+#ifdef __AVR__
+#include <avr/pgmspace.h>
 #include <SoftwareSerial.h>
+#define SERIAL_CLASS SoftwareSerial
+#elif defined(ESP32)
+#include <pgmspace.h>
+#include <HardwareSerial.h>
+#define SERIAL_CLASS HardwareSerial
+#endif
 
 #define RECEIVE_TIMEOUT_VALUE 1000 // Timeout for I2C receive
 
@@ -100,8 +110,12 @@ class YFROBOTFPM383
     // -----------------------------------------------------------------------------
     // Constructor - YFROBOTFPM383
     // -----------------------------------------------------------------------------
-    YFROBOTFPM383(SoftwareSerial *softSerial = NULL);
-    SoftwareSerial *_ss;
+    // YFROBOTFPM383(SERIAL_CLASS *serial, int rxPin, int txPin);
+    YFROBOTFPM383(int rxPin, int txPin);
+    SERIAL_CLASS *_ss;
+    // SoftwareSerial *_ss;
+    int _pin_rx;			//RX pin
+    int _pin_tx;			//TX pin
 
     bool begin();
     String getChipSN();
@@ -113,9 +127,9 @@ class YFROBOTFPM383
     uint8_t getChar();
     uint8_t searchMB();
     uint8_t empty();
-    uint8_t * autoEnroll(uint16_t PageID, uint8_t entriesCount = 4);
+    uint8_t * autoEnroll(uint16_t PageID, uint8_t entriesCount);
     uint8_t deleteID(uint16_t PageID);
-    uint8_t enroll(uint16_t PageID, uint8_t entriesCount = 4);
+    uint8_t enroll(uint16_t PageID, uint8_t entriesCount);
     uint8_t identify(bool NoFingerLED);
     // uint8_t getSearchID(uint8_t ACK);
     // void ENROLL_ACK_CHECK(uint8_t ACK);
