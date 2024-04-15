@@ -12,9 +12,6 @@
 
 YFROBOTFPM383::YFROBOTFPM383(int rxPin, int txPin)
 {
-    // _ss = serial;
-    // _ss->begin(57600, rxPin, txPin);
-
     this->_pin_rx = rxPin;
     this->_pin_tx = txPin;
 
@@ -27,13 +24,16 @@ YFROBOTFPM383::YFROBOTFPM383(int rxPin, int txPin)
     _ss->begin(57600);
 
 #elif defined(ESP32)    // ESP32 硬件串口2 自定义引脚
+    // Serial.begin(9600);
+
     // 初始化 ESP32 的硬件串口2
-    _ss = new HardwareSerial(2);
+    _ss = &Serial2;
     // 设置引脚为输入输出模式
     pinMode(this->_pin_rx, INPUT);
     pinMode(this->_pin_tx, OUTPUT);
     // 开始串口通信
-    _ss->begin(57600, SERIAL_8N1, this->_pin_rx,  this->_pin_tx);
+    _ss->begin(57600, SERIAL_8N2, this->_pin_rx, this->_pin_tx);
+    // Serial.println("Serial2 init success");
 #endif
 
 }

@@ -11,7 +11,6 @@
 #define YFROBOTFPM383_H
 
 #include "Arduino.h"
-// #include <SoftwareSerial.h>
 
 #ifdef __AVR__
 #include <avr/pgmspace.h>
