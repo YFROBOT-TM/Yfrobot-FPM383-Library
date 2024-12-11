@@ -322,6 +322,7 @@ uint8_t YFROBOTFPM383::identify(bool NoFingerLED)
                 // return 0x17;
             } else { // 搜索到未认证手指时，闪烁红灯两次
                 controlLED(PS_RedLEDBuffer);
+                return 0xFE;    // 搜索到未认证手指时，默认返回 0xFE
             }
         }
     } else if(getImage() == 0x02) { // 无手指时，NoFingerLED == true 闪烁红绿色灯一次
