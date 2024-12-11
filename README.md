@@ -52,6 +52,7 @@ Methods：
 
 
 ## 更新日志 Release Note
+* V0.0.7    更新功能：搜索到未认证手指时，默认返回 0xFE。Update Date: 2024-12-11
 * V0.0.6    适配ESP32系列主板，测试在ESP32-WROOM-32E。Update Date: 04-15-2024
 * V0.0.5    适配ESP32系列主板，测试在ESP32-WROOM-32E。Update Date: 04-11-2024
 * V0.0.4    更改library.properties文件。
