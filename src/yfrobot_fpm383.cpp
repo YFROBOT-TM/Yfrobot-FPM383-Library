@@ -97,6 +97,7 @@ String YFROBOTFPM383::getChipSN()
         for(int i = 0; i < 9; i++){
             CSN[i] =  PS_ReceiveBuffer[i+10];
         }
+        controlLED(PS_OFFLEDBuffer);    // 全灭
         return HexToString(CSN, 9);
     }
     return "";
@@ -290,7 +291,7 @@ uint8_t YFROBOTFPM383::enroll(uint16_t PageID, uint8_t entriesCount)
         controlLED(PS_RedLEDLOOPBuffer);
         return 0x01; // 该ID已注册指纹循环闪烁红灯
     } else {
-        controlLED(PS_OFFLEDBuffer);
+        controlLED(PS_OFFLEDBuffer);    // 全灭
         return 0xff;
     }
 }
