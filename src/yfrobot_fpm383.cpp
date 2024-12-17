@@ -98,6 +98,7 @@ String YFROBOTFPM383::getChipSN()
             CSN[i] =  PS_ReceiveBuffer[i+10];
         }
         controlLED(PS_OFFLEDBuffer);    // 全灭
+        delay(100); // 重要
         return HexToString(CSN, 9);
     }
     return "";
