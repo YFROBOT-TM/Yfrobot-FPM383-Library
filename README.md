@@ -52,6 +52,8 @@ Methods：
 
 
 ## 更新日志 Release Note
+* V0.0.8    修复bug。
+            Update Date: 2024-12-17
 * V0.0.7    更新功能：搜索到未认证手指时，默认返回 0xFE；
             初始化增加LED控制全灭，防止LED进入死循环。
             Update Date: 2024-12-12
